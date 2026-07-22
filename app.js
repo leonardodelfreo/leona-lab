@@ -130,6 +130,7 @@ const authUserEl = document.getElementById("authUser");
 const authPassEl = document.getElementById("authPass");
 const authLoginBtn = document.getElementById("authLoginBtn");
 const authLogoutBtn = document.getElementById("authLogoutBtn");
+const billingPortalBtn = document.getElementById("billingPortalBtn");
 const authStatusEl = document.getElementById("authStatus");
 
 const ASSET_CATALOG = [
@@ -377,6 +378,7 @@ function applyAuthUi() {
   if (authPassEl) authPassEl.disabled = isAuth;
   if (authLoginBtn) authLoginBtn.disabled = isAuth;
   if (authLogoutBtn) authLogoutBtn.disabled = !isAuth;
+  if (billingPortalBtn) billingPortalBtn.disabled = !isAuth;
   if (authStatusEl) {
     authStatusEl.textContent = isAuth
       ? `Sessione: ${state.auth?.user?.name || state.auth?.user?.id || "utente"}`
@@ -4971,6 +4973,32 @@ function wireEvents() {
     await logoutAppUser();
     if (authStatusEl) authStatusEl.textContent = "Sessione chiusa";
     window.location.href = "/";
+  });
+
+  billingPortalBtn?.addEventListener("click", async () => {
+    const token = getStoredAuthToken() || state.auth?.token;
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+    billingPortalBtn.disabled = true;
+    try {
+      const response = await fetch("/api/billing/portal", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+      if (!payload?.url) throw new Error("URL portale mancante");
+      window.location.href = payload.url;
+    } catch (error) {
+      if (authStatusEl) authStatusEl.textContent = `Billing: ${error.message}`;
+      else statusEl.textContent = `Billing: ${error.message}`;
+      billingPortalBtn.disabled = false;
+    }
   });
 
   assetGroupEl?.addEventListener("change", () => {

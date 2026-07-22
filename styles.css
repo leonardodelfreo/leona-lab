@@ -756,11 +756,18 @@ body {
   line-height: 1.4;
 }
 
-.pricing-card-featured {
-  border-color: rgba(212, 175, 55, 0.55);
-  box-shadow:
-    0 16px 34px rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(212, 175, 55, 0.22);
+.legal-doc h2 {
+  margin: 18px 0 6px;
+  font-size: 1.05rem;
+}
+
+.legal-doc ul {
+  padding-left: 18px;
+}
+
+.legal-doc p,
+.legal-doc li {
+  line-height: 1.55;
 }
 
 .auth-form {

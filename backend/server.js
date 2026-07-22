@@ -1167,6 +1167,12 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/registrati" || pathname === "/registrati/" || pathname === "/register" || pathname === "/register/") {
     return serveStatic(req, res, "/registrati.html");
   }
+  if (pathname === "/privacy" || pathname === "/privacy/") {
+    return serveStatic(req, res, "/privacy.html");
+  }
+  if (pathname === "/termini" || pathname === "/termini/" || pathname === "/terms" || pathname === "/terms/") {
+    return serveStatic(req, res, "/termini.html");
+  }
   if (pathname === "/app" || pathname === "/app/") {
     return serveStatic(req, res, "/index.html");
   }
@@ -1231,7 +1237,7 @@ const server = http.createServer(async (req, res) => {
       if (plan.mode === "subscription") {
         priceData.recurring = { interval: plan.interval };
       }
-      const session = await stripe.checkout.sessions.create({
+      const sessionParams = {
         mode: plan.mode,
         line_items: [{ price_data: priceData, quantity: 1 }],
         success_url: `${base}/registrati?plan=${encodeURIComponent(plan.id)}&session_id={CHECKOUT_SESSION_ID}`,
@@ -1239,7 +1245,11 @@ const server = http.createServer(async (req, res) => {
         metadata: { plan: plan.id },
         allow_promotion_codes: true,
         billing_address_collection: "auto",
-      });
+      };
+      if (plan.mode === "payment") {
+        sessionParams.customer_creation = "always";
+      }
+      const session = await stripe.checkout.sessions.create(sessionParams);
       return json(res, 200, { ok: true, url: session.url, sessionId: session.id, plan: plan.id });
     } catch (error) {
       return json(res, 400, { ok: false, error: error?.message || "checkout fallito" });
@@ -1262,6 +1272,37 @@ const server = http.createServer(async (req, res) => {
       });
     } catch (error) {
       return json(res, 400, { ok: false, error: error?.message || "sessione non valida" });
+    }
+  }
+
+  if (pathname === "/api/billing/portal" && req.method === "POST") {
+    try {
+      const stripe = getStripe();
+      if (!stripe) return json(res, 503, { ok: false, error: "Stripe non configurato" });
+      const session = getSessionFromRequest(req);
+      if (!session) return json(res, 401, { ok: false, error: "login richiesto" });
+      const users = readUsers();
+      const user = users.find((u) => u.username === session.userId);
+      if (!user) return json(res, 404, { ok: false, error: "utente non trovato" });
+      let customerId = user.stripeCustomerId || null;
+      if (!customerId && user.email) {
+        const existing = await stripe.customers.list({ email: normalizeEmail(user.email), limit: 1 });
+        customerId = existing.data?.[0]?.id || null;
+      }
+      if (!customerId) {
+        return json(res, 400, {
+          ok: false,
+          error: "Nessun cliente Stripe collegato a questo account. Contatta assistenza.",
+        });
+      }
+      const base = resolveAppBaseUrl(req);
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${base}/app`,
+      });
+      return json(res, 200, { ok: true, url: portal.url });
+    } catch (error) {
+      return json(res, 400, { ok: false, error: error?.message || "portale billing non disponibile" });
     }
   }
 
