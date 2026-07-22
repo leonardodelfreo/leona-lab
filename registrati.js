@@ -7,17 +7,18 @@ const passwordEl = document.getElementById("regPassword");
 const submitBtn = document.getElementById("regSubmitBtn");
 const statusEl = document.getElementById("regStatus");
 const planLabelEl = document.getElementById("selectedPlanLabel");
+const planPriceEl = document.getElementById("selectedPlanPrice");
 
-const PLAN_LABELS = {
-  starter: "Starter",
-  pro: "Pro",
-  desk: "Desk",
+const PLAN_INFO = {
+  mensile: { label: "Mensile", price: "24,90 € / mese" },
+  annuale: { label: "Annuale", price: "219,90 € / anno" },
+  lifetime: { label: "Lifetime", price: "2.999,90 € una volta" },
 };
 
 function getSelectedPlan() {
   const params = new URLSearchParams(window.location.search);
-  const plan = String(params.get("plan") || "starter").toLowerCase();
-  return PLAN_LABELS[plan] ? plan : "starter";
+  const plan = String(params.get("plan") || "mensile").toLowerCase();
+  return PLAN_INFO[plan] ? plan : "mensile";
 }
 
 function setStatus(text, cls = "") {
@@ -110,9 +111,9 @@ async function doRegister() {
 }
 
 const selectedPlan = getSelectedPlan();
-if (planLabelEl) {
-  planLabelEl.textContent = PLAN_LABELS[selectedPlan] || "Starter";
-}
+const info = PLAN_INFO[selectedPlan];
+if (planLabelEl) planLabelEl.textContent = info.label;
+if (planPriceEl) planPriceEl.textContent = info.price;
 
 submitBtn?.addEventListener("click", doRegister);
 emailEl?.addEventListener("blur", suggestUsernameFromEmail);

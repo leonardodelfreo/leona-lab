@@ -711,6 +711,55 @@ body {
   font-weight: 700;
 }
 
+.pricing-badge {
+  margin: 0 0 6px;
+  color: var(--accent-teal);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.price-amount {
+  margin: 8px 0 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.price-value {
+  color: var(--accent-gold);
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(1.8rem, 3vw, 2.35rem);
+  line-height: 1;
+  font-weight: 400;
+}
+
+.price-period {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.pricing-features {
+  margin: 10px 0 14px;
+  padding-left: 18px;
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+}
+
+.pricing-features li {
+  line-height: 1.4;
+}
+
+.pricing-card-featured {
+  border-color: rgba(212, 175, 55, 0.55);
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(212, 175, 55, 0.22);
+}
+
 .auth-form {
   display: grid;
   gap: 8px;

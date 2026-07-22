@@ -1151,7 +1151,9 @@ const server = http.createServer(async (req, res) => {
       const username = usernameRaw || (email.includes("@") ? email.split("@")[0].replace(/[^a-z0-9._-]/gi, "") : "");
       const password = String(body?.password || "");
       const displayName = String(body?.displayName || username || email).trim();
-      const plan = String(body?.plan || "starter").trim().toLowerCase();
+      const plan = String(body?.plan || "mensile").trim().toLowerCase();
+      const allowedPlans = ["mensile", "annuale", "lifetime", "starter", "pro", "desk"];
+      const normalizedPlan = allowedPlans.includes(plan) ? plan : "mensile";
       if (!email || !email.includes("@")) {
         return json(res, 400, { ok: false, error: "email obbligatoria" });
       }
@@ -1176,7 +1178,7 @@ const server = http.createServer(async (req, res) => {
         email,
         passwordHash: hashPassword(password),
         displayName: displayName || username,
-        plan: ["starter", "pro", "desk"].includes(plan) ? plan : "starter",
+        plan: normalizedPlan,
         createdAt: new Date().toISOString(),
       });
       writeUsers(users);
@@ -1196,7 +1198,7 @@ const server = http.createServer(async (req, res) => {
           id: username,
           email,
           name: displayName || username,
-          plan: ["starter", "pro", "desk"].includes(plan) ? plan : "starter",
+          plan: normalizedPlan,
         },
       });
     } catch (error) {

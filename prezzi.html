@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Piani | Leona.Lab</title>
+    <title>Piani e prezzi | Leona.Lab</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260722-account-90" />
+    <link rel="stylesheet" href="./styles.css?v=20260722-pricing-91" />
   </head>
   <body class="landing-body auth-page">
     <main class="landing-shell auth-page-shell">
@@ -21,30 +21,50 @@
 
       <section class="card">
         <p class="landing-kicker">Abbonamento</p>
-        <h1>Scegli un piano</h1>
+        <h1>Piani e prezzi</h1>
         <p class="muted">
-          I prezzi arrivano dopo. Ora puoi gia scegliere il piano e creare l'account per entrare in piattaforma.
+          Stesso accesso completo alla piattaforma. Scegli solo come preferisci pagare.
         </p>
       </section>
 
       <section class="landing-grid pricing-placeholder-grid">
         <article class="card pricing-card">
-          <h2>Starter</h2>
-          <p class="price-placeholder">Prezzo in arrivo</p>
-          <p class="muted">Desk multi-asset, COT e stagionalita.</p>
-          <a class="landing-btn primary" href="/registrati?plan=starter">Continua con Starter</a>
+          <p class="pricing-badge">Flessibile</p>
+          <h2>Mensile</h2>
+          <p class="price-amount"><span class="price-value">24,90 €</span><span class="price-period">/ mese</span></p>
+          <p class="muted">Accesso completo al desk. Disdici quando vuoi.</p>
+          <ul class="pricing-features">
+            <li>COT, stagionalita, segnali e macro</li>
+            <li>Timing giorni del mese</li>
+            <li>Aggiornamenti feed inclusi</li>
+          </ul>
+          <a class="landing-btn primary" href="/registrati?plan=mensile">Scegli Mensile</a>
         </article>
-        <article class="card pricing-card">
-          <h2>Pro</h2>
-          <p class="price-placeholder">Prezzo in arrivo</p>
-          <p class="muted">Segnali, macro calendar e workflow completo.</p>
-          <a class="landing-btn primary" href="/registrati?plan=pro">Continua con Pro</a>
+
+        <article class="card pricing-card pricing-card-featured">
+          <p class="pricing-badge">Consigliato</p>
+          <h2>Annuale</h2>
+          <p class="price-amount"><span class="price-value">219,90 €</span><span class="price-period">/ anno</span></p>
+          <p class="muted">Un anno intero con risparmio rispetto al mensile.</p>
+          <ul class="pricing-features">
+            <li>Tutto del piano Mensile</li>
+            <li>~18,33 € al mese equivalenti</li>
+            <li>Ideale per uso continuativo</li>
+          </ul>
+          <a class="landing-btn primary" href="/registrati?plan=annuale">Scegli Annuale</a>
         </article>
+
         <article class="card pricing-card">
-          <h2>Desk</h2>
-          <p class="price-placeholder">Prezzo in arrivo</p>
-          <p class="muted">Uso intensivo e setup avanzati.</p>
-          <a class="landing-btn primary" href="/registrati?plan=desk">Continua con Desk</a>
+          <p class="pricing-badge">Una tantum</p>
+          <h2>Lifetime</h2>
+          <p class="price-amount"><span class="price-value">2.999,90 €</span><span class="price-period">una volta</span></p>
+          <p class="muted">Accesso a vita: paghi una volta, resti dentro.</p>
+          <ul class="pricing-features">
+            <li>Tutto del desk Leona.Lab</li>
+            <li>Nessun rinnovo ricorrente</li>
+            <li>Per chi vuole impegno definitivo</li>
+          </ul>
+          <a class="landing-btn primary" href="/registrati?plan=lifetime">Scegli Lifetime</a>
         </article>
       </section>
 
