@@ -1,0 +1,16 @@
+node_modules/
+.npm/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+!.env.example
+data/
+data/**
+!data/.gitkeep
+.vscode/
+.idea/
+*.zip
+*.tar.gz
+.cursor/

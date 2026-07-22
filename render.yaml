@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: leona-lab
+    runtime: node
+    plan: free
+    buildCommand: ""
+    startCommand: node backend/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0

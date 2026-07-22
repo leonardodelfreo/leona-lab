@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Registrati | Leona.Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=20260722-account-90" />
+  </head>
+  <body class="landing-body auth-page">
+    <main class="landing-shell auth-page-shell">
+      <section class="landing-topnav card">
+        <a class="brand-link" href="/"><strong>Leona.Lab</strong></a>
+        <div class="landing-topnav-links">
+          <a href="/">Home</a>
+          <a href="/prezzi">Piani</a>
+          <a class="auth-cta" href="/login">Login</a>
+        </div>
+      </section>
+
+      <section class="card auth-panel">
+        <p class="landing-kicker">Crea account</p>
+        <h1>Registrati</h1>
+        <p class="muted">
+          Piano scelto: <strong id="selectedPlanLabel">Starter</strong>.
+          I prezzi li colleghiamo dopo; per ora crei l'account e entri subito in piattaforma.
+        </p>
+        <div class="auth-form">
+          <label class="auth-label" for="regEmail">Email</label>
+          <input id="regEmail" type="email" placeholder="nome@email.com" autocomplete="email" />
+          <label class="auth-label" for="regUsername">Username</label>
+          <input id="regUsername" type="text" placeholder="es. leo.trader" autocomplete="username" />
+          <label class="auth-label" for="regName">Nome visualizzato</label>
+          <input id="regName" type="text" placeholder="Come vuoi apparire" autocomplete="nickname" />
+          <label class="auth-label" for="regPassword">Password</label>
+          <input id="regPassword" type="password" placeholder="Minimo 6 caratteri" autocomplete="new-password" />
+          <button id="regSubmitBtn" class="auth-cta" type="button">Crea account ed entra</button>
+          <small id="regStatus" class="muted">Dopo la registrazione apri la dashboard.</small>
+        </div>
+        <p class="auth-switch muted">
+          Hai gia un account?
+          <a class="auth-cta" href="/login">Vai al login</a>
+        </p>
+      </section>
+    </main>
+
+    <script src="./registrati.js?v=20260722-account-90"></script>
+  </body>
+</html>

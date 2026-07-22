@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login | Leona.Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=20260722-account-90" />
+  </head>
+  <body class="landing-body auth-page">
+    <main class="landing-shell auth-page-shell">
+      <section class="landing-topnav card">
+        <a class="brand-link" href="/"><strong>Leona.Lab</strong></a>
+        <div class="landing-topnav-links">
+          <a href="/">Home</a>
+          <a class="auth-cta" href="/prezzi">Registrati</a>
+        </div>
+      </section>
+
+      <section class="card auth-panel">
+        <p class="landing-kicker">Accesso</p>
+        <h1>Login</h1>
+        <p class="muted">Inserisci email o username e password per entrare.</p>
+        <div class="auth-form">
+          <label class="auth-label" for="loginEmail">Email o username</label>
+          <input id="loginEmail" type="text" placeholder="nome@email.com oppure leona" autocomplete="username" />
+          <label class="auth-label" for="loginPassword">Password</label>
+          <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" />
+          <button id="loginSubmitBtn" class="auth-cta" type="button">Entra in Leona.Lab</button>
+          <small id="loginStatus" class="muted">Dopo il login apri la dashboard.</small>
+        </div>
+        <p class="auth-switch muted">
+          Non hai un account?
+          <a class="auth-cta" href="/prezzi">Scegli un piano e registrati</a>
+        </p>
+      </section>
+    </main>
+
+    <script src="./login.js?v=20260722-account-90"></script>
+  </body>
+</html>

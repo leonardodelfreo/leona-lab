@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Leona.Lab</title>
+    <link rel="stylesheet" href="./styles.css?v=20260722-landing-89" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar card">
+        <div class="brand">
+          <h1>Leona.Lab</h1>
+          <p class="subtitle">Desk multi-asset: COT, stagionalita, segnali e macro</p>
+          <div class="brand-links">
+            <a href="/">Torna alla home</a>
+            <button id="authLogoutBtn" type="button" class="linkish-btn">Esci</button>
+          </div>
+        </div>
+        <div class="controls-row">
+          <div>
+            <strong>Tipologia</strong>
+            <select id="assetGroup">
+              <option value="ALL" selected>Tutti</option>
+              <option value="Forex">Forex</option>
+              <option value="Metals">Metalli</option>
+              <option value="Indices">Indici</option>
+              <option value="Agriculture">Materie agricole</option>
+            </select>
+          </div>
+          <div>
+            <strong>Asset</strong>
+            <input id="assetSearch" list="assetList" placeholder="Cerca asset (es. XAUUSD, EURUSD, SPX500...)" />
+            <datalist id="assetList"></datalist>
+          </div>
+          <div>
+            <strong>Timeframe</strong>
+            <div class="timeframe-group" id="timeframeGroup">
+              <button class="tf-btn" data-tf="3M">3M</button>
+              <button class="tf-btn" data-tf="6M">6M</button>
+              <button class="tf-btn active" data-tf="1Y">1Y</button>
+              <button class="tf-btn" data-tf="3Y">3Y</button>
+              <button class="tf-btn" data-tf="5Y">5Y</button>
+              <button class="tf-btn" data-tf="ALL">ALL</button>
+            </div>
+          </div>
+          <div class="refresh-group">
+            <label for="layoutMode"><strong>Vista</strong></label>
+            <select id="layoutMode">
+              <option value="desk" selected>Desk View</option>
+              <option value="focus">Focus View</option>
+            </select>
+            <label for="refreshInterval"><strong>Refresh</strong></label>
+            <select id="refreshInterval">
+              <option value="10" selected>10s</option>
+              <option value="15">15s</option>
+              <option value="30">30s</option>
+              <option value="60">60s</option>
+              <option value="300">5m</option>
+            </select>
+            <button id="refreshNowBtn">Aggiorna ora</button>
+            <button id="resetZoomBtn" title="Reset zoom su tutti i grafici">Reset Zoom</button>
+            <span id="liveBadge" class="live-badge">LIVE</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="page-tabs card">
+        <button id="tabCot" class="page-tab-btn active">COT</button>
+        <button id="tabSeasonality" class="page-tab-btn">Stagionalita</button>
+        <button id="tabSignals" class="page-tab-btn">Segnali</button>
+        <button id="tabMacro" class="page-tab-btn">Macro</button>
+      </section>
+
+      <section id="cotPage" class="page-view active">
+        <section class="grid metrics-grid kpi-strip">
+          <article class="card">
+            <h2>COT Regime</h2>
+            <p id="cotRegimeValue" class="metric">--</p>
+            <small id="cotRegimeHint" class="muted">--</small>
+          </article>
+          <article class="card">
+            <h2>COT Index (Non-Comm)</h2>
+            <p id="cotIndexValue" class="metric">--</p>
+            <small id="cotIndexHint" class="muted">--</small>
+          </article>
+          <article class="card">
+            <h2>OI Momentum 4w</h2>
+            <p id="oiMomentum4w" class="metric">--</p>
+            <small id="oiMomentumHint" class="muted">Variazione open interest</small>
+          </article>
+          <article class="card">
+            <h2>Non-Commercial</h2>
+            <p id="cotNonCommNet" class="metric">--</p>
+            <small id="cotNonCommPct" class="muted">--</small>
+          </article>
+          <article class="card">
+            <h2>Commercial</h2>
+            <p id="cotCommercialNet" class="metric">--</p>
+            <small id="cotCommercialPct" class="muted">--</small>
+          </article>
+          <article class="card">
+            <h2>Retail</h2>
+            <p id="cotRetailNet" class="metric">--</p>
+            <small id="cotRetailPct" class="muted">--</small>
+          </article>
+        </section>
+
+        <section class="main-grid">
+          <div class="left-stack">
+            <article id="panelCotFocus" class="card chart-panel cot-focus-panel">
+              <div class="cot-focus-controls">
+                <div>
+                  <h2>COT Focus</h2>
+                  <small class="muted">Posizioni nette Commercial / Non-Commercial / Retail. Linea zero = equilibrio.</small>
+                </div>
+                <div class="cot-focus-selectors">
+                  <label for="cotCategory">Categoria</label>
+                  <select id="cotCategory">
+                    <option value="commercial">Commercial</option>
+                    <option value="nonCommercial" selected>Non-Commercial</option>
+                    <option value="retail">Retail</option>
+                  </select>
+                </div>
+                <div class="cot-focus-selectors">
+                  <label for="cotMetric">Metrica</label>
+                  <select id="cotMetric">
+                    <option value="tvLegacyNet" selected>Net style TV (legacy)</option>
+                    <option value="netPctOi">Net %OI</option>
+                    <option value="cotIndex">COT Index (0-100)</option>
+                  </select>
+                </div>
+                <div class="cot-focus-selectors">
+                  <label for="cotLookback">Lookback COT Index</label>
+                  <select id="cotLookback">
+                    <option value="26">26 settimane</option>
+                    <option value="52">52 settimane</option>
+                    <option value="156" selected>156 settimane</option>
+                  </select>
+                </div>
+                <div class="cot-focus-selectors">
+                  <label for="cotChartHeight">Altezza</label>
+                  <input id="cotChartHeight" type="range" min="420" max="780" step="10" value="540" />
+                  <span id="cotChartHeightValue" class="muted">540px</span>
+                </div>
+              </div>
+              <canvas id="cotFocusChart"></canvas>
+            </article>
+          </div>
+
+          <aside class="right-stack">
+            <section class="card">
+              <h2>Snapshot positioning</h2>
+              <div class="detail-grid">
+                <div><strong>Data report:</strong> <span id="cotDate">--</span></div>
+                <div><strong>Open Interest:</strong> <span id="cotOi">--</span></div>
+                <div><strong>Commercial L/S/N:</strong> <span id="cotCommercialTriplet">--</span></div>
+                <div><strong>Non-Commercial L/S/N:</strong> <span id="cotNonCommTriplet">--</span></div>
+                <div><strong>Retail L/S/N:</strong> <span id="cotRetailTriplet">--</span></div>
+                <div><strong>Posizioni aggiunte (1w):</strong> <span id="cotAdded1w">--</span></div>
+                <div><strong>Posizioni tolte (1w):</strong> <span id="cotRemoved1w">--</span></div>
+                <div><strong>Netto assoluto (selezione):</strong> <span id="cotNetAbs">--</span></div>
+                <div><strong>Delta Non-Comm 4w:</strong> <span id="cotDelta4">--</span></div>
+                <div><strong>Crowding:</strong> <span id="cotCrowdingSignal">--</span></div>
+                <div><strong>Divergenza Comm vs NonComm:</strong> <span id="cotDivergenceSignal">--</span></div>
+              </div>
+            </section>
+
+            <section class="card flow-table-card">
+              <h2>Flussi settimanali (aperti / chiusi)</h2>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Week</th>
+                      <th>Comm O/C</th>
+                      <th>Comm O/C %OI</th>
+                      <th>NonComm O/C</th>
+                      <th>NonComm O/C %OI</th>
+                      <th>Retail O/C</th>
+                      <th>Retail O/C %OI</th>
+                    </tr>
+                  </thead>
+                  <tbody id="weeklyFlowRows"></tbody>
+                </table>
+              </div>
+            </section>
+          </aside>
+        </section>
+      </section>
+
+      <section id="seasonalityPage" class="page-view">
+        <section class="card seasonality-controls">
+          <div class="controls-row">
+            <div>
+              <strong>Finestra stagionalita</strong>
+              <select id="seasonalityYears">
+                <option value="3">3 anni</option>
+                <option value="5">5 anni</option>
+                <option value="7">7 anni</option>
+                <option value="10" selected>10 anni</option>
+                <option value="15">15 anni</option>
+                <option value="20">20 anni</option>
+                <option value="ALL">All storico</option>
+              </select>
+            </div>
+            <div>
+              <strong>Visualizzazione</strong>
+              <select id="seasonalityMode">
+                <option value="line" selected>Grafico a linee</option>
+                <option value="candle">Grafico a candele</option>
+                <option value="numbers">Numeri percentuali</option>
+              </select>
+            </div>
+            <div>
+              <strong>Mese ingresso</strong>
+              <select id="seasonalityStartMonth">
+                <option value="0">Gen</option>
+                <option value="1">Feb</option>
+                <option value="2">Mar</option>
+                <option value="3">Apr</option>
+                <option value="4">Mag</option>
+                <option value="5">Giu</option>
+                <option value="6">Lug</option>
+                <option value="7">Ago</option>
+                <option value="8">Set</option>
+                <option value="9">Ott</option>
+                <option value="10">Nov</option>
+                <option value="11">Dic</option>
+              </select>
+            </div>
+            <div>
+              <strong>Orizzonte</strong>
+              <select id="seasonalityHorizon">
+                <option value="1">1 mese</option>
+                <option value="3" selected>3 mesi</option>
+                <option value="6">6 mesi</option>
+              </select>
+            </div>
+            <small id="seasonalityWindowInfo" class="muted">Calcolo in corso...</small>
+          </div>
+        </section>
+        <section class="card chart-panel seasonality-only">
+          <h2>Stagionalita media mensile</h2>
+          <canvas id="seasonalityChart"></canvas>
+          <div id="seasonalityNumbers" class="seasonality-numbers"></div>
+        </section>
+        <section class="card seasonality-insights">
+          <h2>Seasonality Insights</h2>
+          <div id="seasonalityInsightCards" class="seasonality-insight-cards"></div>
+        </section>
+        <section class="seasonality-bottom-grid">
+          <section class="card seasonality-ranking">
+            <h2>Ranking Mensile</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mese</th>
+                    <th>Avg %</th>
+                    <th>Mediana %</th>
+                    <th>Range %</th>
+                  </tr>
+                </thead>
+                <tbody id="seasonalityRankRows"></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="card seasonality-day-timing">
+            <h2>Timing giorni del mese</h2>
+            <p class="muted seasonality-day-timing-note">
+              Per ogni mese: giorno storicamente piu favorevole per long e per short (media e hit-rate su dati reali).
+              * = campione debole. Nessun numero inventato.
+            </p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mese</th>
+                    <th>Bias mese</th>
+                    <th>Giorno Long piu probabile</th>
+                    <th>Giorno Short piu probabile</th>
+                  </tr>
+                </thead>
+                <tbody id="seasonalityDayTimingRows"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </section>
+
+      <section id="signalPage" class="page-view">
+        <section class="grid bias-strip">
+          <article class="card">
+            <h2>Bias</h2>
+            <p id="biasScore" class="metric">--</p>
+            <small id="biasConfidence" class="muted">Quanto e chiaro il quadro</small>
+          </article>
+          <article class="card">
+            <h2>Stato</h2>
+            <p id="biasState" class="metric">--</p>
+            <small id="biasDrivers" class="muted">Driver: --</small>
+          </article>
+          <article class="card">
+            <h2>Playbook</h2>
+            <p id="playbookTitle" class="metric">--</p>
+            <small id="playbookText" class="muted">Cosa fare in pratica</small>
+          </article>
+          <article class="card">
+            <h2>Qualita dati</h2>
+            <p id="dataQualityScore" class="metric">--</p>
+            <small id="dataQualityText" class="muted">Freschezza feed</small>
+          </article>
+          <article class="card">
+            <h2>Scenario</h2>
+            <p id="scenarioProb" class="metric">--</p>
+            <small id="scenarioProbText" class="muted">Probabilita relative</small>
+          </article>
+          <article class="card">
+            <h2>Cosa pesa di piu</h2>
+            <p id="biasContribMain" class="metric">--</p>
+            <small id="biasContribText" class="muted">Contributori al bias</small>
+          </article>
+        </section>
+        <section class="card signal-tools-card">
+          <div class="controls-row">
+            <div>
+              <strong>Alert intelligenti</strong>
+              <select id="alertMode">
+                <option value="balanced" selected>Bilanciati</option>
+                <option value="aggressive">Aggressivi</option>
+                <option value="conservative">Conservativi</option>
+              </select>
+            </div>
+            <div>
+              <strong>Replay storico</strong>
+              <select id="replayMode">
+                <option value="off" selected>Off (live)</option>
+                <option value="on">On</option>
+              </select>
+            </div>
+            <div class="signal-slider-wrap">
+              <strong>Step replay</strong>
+              <input id="replayStep" type="range" min="0" max="0" step="1" value="0" />
+              <small id="replayStepLabel" class="muted">Storico non disponibile</small>
+            </div>
+          </div>
+        </section>
+        <section class="signal-intel-grid">
+          <article class="card">
+            <h2>Session Context</h2>
+            <div class="detail-grid">
+              <div><strong>Sessione:</strong> <span id="sessionName">--</span></div>
+              <div><strong>Bias sessione:</strong> <span id="sessionBias">--</span></div>
+              <div><strong>Volatilita media:</strong> <span id="sessionVol">--</span></div>
+              <div><strong>Prossima sessione:</strong> <span id="sessionNext">--</span></div>
+              <div><strong>Clock UTC:</strong> <span id="sessionClock">--</span></div>
+            </div>
+          </article>
+          <article class="card">
+            <h2>Risk Overlay</h2>
+            <div class="detail-grid">
+              <div><strong>ATR proxy 14d:</strong> <span id="riskAtr">--</span></div>
+              <div><strong>Escursione media 1d:</strong> <span id="riskDailyMove">--</span></div>
+              <div><strong>Regime rischio:</strong> <span id="riskRegime">--</span></div>
+              <div><strong>Stop tecnico:</strong> <span id="riskStop">--</span></div>
+              <div><strong>Suggerimento size:</strong> <span id="riskSuggestion">--</span></div>
+            </div>
+          </article>
+          <article class="card">
+            <h2>Livelli Chiave Auto</h2>
+            <div class="detail-grid">
+              <div><strong>Pivot:</strong> <span id="keyPivot">--</span></div>
+              <div><strong>Supporti:</strong> <span id="keySupports">--</span></div>
+              <div><strong>Resistenze:</strong> <span id="keyResistances">--</span></div>
+              <div><strong>Trend filter:</strong> <span id="keyTrend">--</span></div>
+            </div>
+          </article>
+          <article class="card">
+            <h2>Replay Snapshot</h2>
+            <div class="detail-grid">
+              <div><strong>Timestamp:</strong> <span id="replayTs">--</span></div>
+              <div><strong>Bias:</strong> <span id="replayBias">--</span></div>
+              <div><strong>Scenario:</strong> <span id="replayScenario">--</span></div>
+              <div><strong>Quality:</strong> <span id="replayQuality">--</span></div>
+            </div>
+          </article>
+          <article class="card">
+            <h2>Adaptive Confidence</h2>
+            <div class="detail-grid">
+              <div><strong>Modalita:</strong> <span id="adaptiveMode">--</span></div>
+              <div><strong>Alert cadence:</strong> <span id="adaptiveAlertCadence">--</span></div>
+              <div><strong>Risk scale:</strong> <span id="adaptiveRiskScale">--</span></div>
+              <div><strong>Risk cap:</strong> <span id="adaptiveRiskCap">--</span></div>
+              <div><strong>Status:</strong> <span id="adaptiveStatus">--</span></div>
+            </div>
+          </article>
+          <article class="card">
+            <h2>Scenario Tree</h2>
+            <div class="detail-grid">
+              <div><strong>BULL trigger:</strong> <span id="scenarioBullTrigger">--</span></div>
+              <div><strong>BULL invalid:</strong> <span id="scenarioBullInvalid">--</span></div>
+              <div><strong>BULL prob:</strong> <span id="scenarioBullProb">--</span></div>
+              <div><strong>BASE trigger:</strong> <span id="scenarioBaseTrigger">--</span></div>
+              <div><strong>BASE invalid:</strong> <span id="scenarioBaseInvalid">--</span></div>
+              <div><strong>BASE prob:</strong> <span id="scenarioBaseProb">--</span></div>
+              <div><strong>BEAR trigger:</strong> <span id="scenarioBearTrigger">--</span></div>
+              <div><strong>BEAR invalid:</strong> <span id="scenarioBearInvalid">--</span></div>
+              <div><strong>BEAR prob:</strong> <span id="scenarioBearProb">--</span></div>
+            </div>
+          </article>
+        </section>
+        <section class="main-grid">
+          <div class="left-stack">
+            <section class="card">
+              <h2>Execution Board</h2>
+              <div class="detail-grid">
+                <div><strong>Direzione:</strong> <span id="execSide">--</span></div>
+                <div><strong>Entry zone:</strong> <span id="execEntry">--</span></div>
+                <div><strong>Invalidazione:</strong> <span id="execInvalidation">--</span></div>
+                <div><strong>Target 1 / 2:</strong> <span id="execTargets">--</span></div>
+                <div><strong>Risk size:</strong> <span id="execRiskSize">--</span></div>
+                <div><strong>Leverage hint:</strong> <span id="execLeverage">--</span></div>
+                <div><strong>Nota:</strong> <span id="execNote">--</span></div>
+              </div>
+            </section>
+            <section class="card seasonality-backtest">
+              <h2>Backtest Segnale Stagionale</h2>
+              <div class="detail-grid">
+                <div><strong>Campioni:</strong> <span id="btSamples">--</span></div>
+                <div><strong>Hit Rate:</strong> <span id="btHitRate">--</span></div>
+                <div><strong>Avg Return:</strong> <span id="btAvg">--</span></div>
+                <div><strong>Median:</strong> <span id="btMedian">--</span></div>
+                <div><strong>Best / Worst:</strong> <span id="btBestWorst">--</span></div>
+              </div>
+            </section>
+          </div>
+          <aside class="right-stack">
+            <section class="card">
+              <h2>Data Source Health</h2>
+              <div class="detail-grid">
+                <div><strong>Prezzi:</strong> <span id="healthPrice">--</span></div>
+                <div><strong>COT:</strong> <span id="healthCot">--</span></div>
+                <div><strong>Stagionalita:</strong> <span id="healthSeasonality">--</span></div>
+              </div>
+            </section>
+            <section class="card alert-card">
+              <h2>Alert Feed</h2>
+              <div id="alertFeed" class="alert-feed"></div>
+            </section>
+            <section class="card flow-table-card">
+              <h2>Signal History</h2>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Ora</th>
+                      <th>Bias</th>
+                      <th>State</th>
+                      <th>Qualita</th>
+                    </tr>
+                  </thead>
+                  <tbody id="signalHistoryRows"></tbody>
+                </table>
+              </div>
+            </section>
+          </aside>
+        </section>
+        <section class="card journal-table-card">
+          <h2>Journal Segnali Auto</h2>
+          <div class="controls-row journal-controls">
+            <div>
+              <strong>Filtro outcome</strong>
+              <select id="journalOutcomeFilter">
+                <option value="ALL" selected>Tutti</option>
+                <option value="OPEN">Open</option>
+                <option value="WIN">Win</option>
+                <option value="LOSS">Loss</option>
+                <option value="FLAT">Flat</option>
+              </select>
+            </div>
+            <div>
+              <strong>Orizzonte valutazione</strong>
+              <select id="journalEvalHorizon">
+                <option value="1">1h</option>
+                <option value="4" selected>4h</option>
+                <option value="8">8h</option>
+                <option value="24">24h</option>
+              </select>
+            </div>
+            <div>
+              <button id="exportJournalCsvBtn">Export CSV</button>
+            </div>
+          </div>
+          <small id="journalStats" class="muted">Campioni -- | WinRate -- | Expectancy --</small>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ora</th>
+                  <th>Bias</th>
+                  <th>Entry</th>
+                  <th>Current</th>
+                  <th>Rit. %</th>
+                  <th>Outcome</th>
+                  <th>Qualita</th>
+                </tr>
+              </thead>
+              <tbody id="signalJournalRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="macroPage" class="page-view">
+        <section class="card macro-controls">
+          <div class="controls-row">
+            <div>
+              <strong>Importanza</strong>
+              <select id="macroImpactFilter">
+                <option value="ALL" selected>Tutte</option>
+                <option value="high">Alta</option>
+                <option value="medium">Media</option>
+                <option value="low">Bassa</option>
+              </select>
+            </div>
+            <div>
+              <strong>Categoria</strong>
+              <select id="macroCategoryFilter">
+                <option value="ALL" selected>Tutte</option>
+                <option value="CPI">CPI</option>
+                <option value="FOMC">FOMC</option>
+                <option value="NFP">NFP</option>
+              </select>
+            </div>
+            <div>
+              <button id="macroRefreshBtn">Aggiorna calendario</button>
+            </div>
+            <span id="macroFeedStateBadge" class="macro-feed-badge macro-feed-unknown">UNKNOWN</span>
+            <small id="macroSourceInfo" class="muted">Fonte macro: --</small>
+          </div>
+        </section>
+        <section class="card notification-config-card">
+          <h2>Notifiche Esterne</h2>
+          <div class="controls-row">
+            <div>
+              <strong>Canale</strong>
+              <select id="notifyChannel">
+                <option value="none" selected>Nessuno</option>
+                <option value="webhook">Webhook generico</option>
+                <option value="discord">Discord</option>
+                <option value="telegram">Telegram</option>
+              </select>
+            </div>
+            <div class="notify-input-block">
+              <strong>Webhook URL</strong>
+              <input id="notifyWebhookUrl" type="text" placeholder="https://..." />
+            </div>
+            <div class="notify-input-block">
+              <strong>Telegram Bot Token</strong>
+              <input id="telegramBotToken" type="text" placeholder="123456:ABC..." />
+            </div>
+            <div class="notify-input-block">
+              <strong>Telegram Chat ID</strong>
+              <input id="telegramChatId" type="text" placeholder="-100..." />
+            </div>
+            <div>
+              <button id="notifyTestBtn">Invia test</button>
+            </div>
+            <small id="notifyStatus" class="muted">Notifiche esterne disattivate</small>
+          </div>
+        </section>
+        <section class="macro-days-grid" id="macroDaysContainer"></section>
+      </section>
+
+      <section class="card status-card">
+        <small id="lastUpdated" class="muted">Ultimo aggiornamento: --</small>
+        <p id="status">Caricamento dati...</p>
+        <p class="muted">Theme build: 20260721-livefix-74</p>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script src="./app.js?v=20260722-data-integrity-88"></script>
+  </body>
+</html>
