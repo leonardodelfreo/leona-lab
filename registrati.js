@@ -8,6 +8,7 @@ const submitBtn = document.getElementById("regSubmitBtn");
 const statusEl = document.getElementById("regStatus");
 const planLabelEl = document.getElementById("selectedPlanLabel");
 const planPriceEl = document.getElementById("selectedPlanPrice");
+const paymentGateEl = document.getElementById("paymentGateStatus");
 
 const PLAN_INFO = {
   mensile: { label: "Mensile", price: "24,90 € / mese" },
@@ -15,10 +16,18 @@ const PLAN_INFO = {
   lifetime: { label: "Lifetime", price: "2.999,90 € una volta" },
 };
 
+let requirePayment = false;
+let checkoutSessionId = "";
+
 function getSelectedPlan() {
   const params = new URLSearchParams(window.location.search);
   const plan = String(params.get("plan") || "mensile").toLowerCase();
   return PLAN_INFO[plan] ? plan : "mensile";
+}
+
+function getSessionId() {
+  const params = new URLSearchParams(window.location.search);
+  return String(params.get("session_id") || "").trim();
 }
 
 function setStatus(text, cls = "") {
@@ -26,6 +35,13 @@ function setStatus(text, cls = "") {
   statusEl.textContent = text;
   statusEl.classList.remove("up", "down");
   if (cls) statusEl.classList.add(cls);
+}
+
+function setGate(text, cls = "") {
+  if (!paymentGateEl) return;
+  paymentGateEl.textContent = text;
+  paymentGateEl.classList.remove("up", "down");
+  if (cls) paymentGateEl.classList.add(cls);
 }
 
 function saveAuthToken(token) {
@@ -96,11 +112,22 @@ async function doRegister() {
     setStatus("Inserisci email e password", "down");
     return;
   }
+  if (requirePayment && !checkoutSessionId) {
+    setStatus("Completa prima il pagamento da /prezzi", "down");
+    return;
+  }
   setStatus("Creazione account...");
   try {
     const payload = await apiJson("/api/auth/register", {
       method: "POST",
-      body: { email, username, displayName, password, plan },
+      body: {
+        email,
+        username,
+        displayName,
+        password,
+        plan,
+        sessionId: checkoutSessionId || undefined,
+      },
     });
     saveAuthToken(payload.token);
     setStatus("Account creato. Apertura dashboard...", "up");
@@ -110,10 +137,54 @@ async function doRegister() {
   }
 }
 
-const selectedPlan = getSelectedPlan();
-const info = PLAN_INFO[selectedPlan];
-if (planLabelEl) planLabelEl.textContent = info.label;
-if (planPriceEl) planPriceEl.textContent = info.price;
+async function initRegisterGate() {
+  const selectedPlan = getSelectedPlan();
+  const info = PLAN_INFO[selectedPlan];
+  if (planLabelEl) planLabelEl.textContent = info.label;
+  if (planPriceEl) planPriceEl.textContent = info.price;
+  checkoutSessionId = getSessionId();
+
+  try {
+    const config = await apiJson("/api/billing/config");
+    requirePayment = Boolean(config.requirePayment);
+  } catch {
+    requirePayment = false;
+  }
+
+  if (!requirePayment) {
+    setGate("Modalita sviluppo: registrazione libera (Stripe non attivo).", "up");
+    if (submitBtn) submitBtn.disabled = false;
+    return;
+  }
+
+  if (!checkoutSessionId) {
+    setGate("Per registrarti paga prima un piano su Piani.", "down");
+    if (submitBtn) submitBtn.disabled = true;
+    return;
+  }
+
+  try {
+    const session = await apiJson(`/api/checkout/session?session_id=${encodeURIComponent(checkoutSessionId)}`);
+    if (session.used) {
+      setGate("Questo pagamento e gia stato usato per un account.", "down");
+      if (submitBtn) submitBtn.disabled = true;
+      return;
+    }
+    if (session.email && emailEl && !emailEl.value) {
+      emailEl.value = session.email;
+      suggestUsernameFromEmail();
+    }
+    if (session.plan && PLAN_INFO[session.plan]) {
+      if (planLabelEl) planLabelEl.textContent = PLAN_INFO[session.plan].label;
+      if (planPriceEl) planPriceEl.textContent = PLAN_INFO[session.plan].price;
+    }
+    setGate("Pagamento verificato. Completa i dati e crea l'account.", "up");
+    if (submitBtn) submitBtn.disabled = false;
+  } catch (error) {
+    setGate(`Pagamento non valido: ${error.message}`, "down");
+    if (submitBtn) submitBtn.disabled = true;
+  }
+}
 
 submitBtn?.addEventListener("click", doRegister);
 emailEl?.addEventListener("blur", suggestUsernameFromEmail);
@@ -122,3 +193,4 @@ passwordEl?.addEventListener("keydown", (event) => {
 });
 
 redirectIfAlreadyLoggedIn();
+initRegisterGate();

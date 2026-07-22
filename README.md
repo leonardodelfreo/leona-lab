@@ -49,8 +49,21 @@ Variabili:
 
 ## Account flow
 
-1. `/prezzi` → scegli Starter / Pro / Desk  
-2. `/registrati?plan=...` → email + username + password  
-3. login automatico → `/app`
+1. `/prezzi` → scegli Mensile / Annuale / Lifetime  
+2. Checkout Stripe sicuro  
+3. `/registrati?plan=...&session_id=...` → crea account  
+4. login automatico → `/app`
 
-I prezzi numerici restano da definire in un passo successivo.
+### Stripe (obbligatorio in produzione)
+
+Su Railway (Variables) imposta:
+
+- `STRIPE_SECRET_KEY` = chiave segreta (`sk_test_...` o `sk_live_...`)
+- `APP_BASE_URL` = `https://leona-lab-production.up.railway.app`
+
+Opzionale:
+
+- `ALLOW_FREE_REGISTER=true` per test senza pagamento
+- `DATA_DIR=/data` se monti un volume persistente
+
+Senza `STRIPE_SECRET_KEY` i piani si vedono, ma il bottone pagamento risponde che Stripe non e configurato.

@@ -414,9 +414,12 @@ body {
   border-color: rgba(212, 175, 55, 0.9);
 }
 
-.pricing-card .landing-btn {
+.pricing-card .landing-btn,
+.pricing-card button.landing-btn {
   display: inline-flex;
   margin-top: 8px;
+  cursor: pointer;
+  font: inherit;
 }
 
 .pricing-card .landing-btn[disabled],

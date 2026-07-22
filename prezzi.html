@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260722-pricing-91" />
+    <link rel="stylesheet" href="./styles.css?v=20260722-stripe-92" />
   </head>
   <body class="landing-body auth-page">
     <main class="landing-shell auth-page-shell">
@@ -23,8 +23,9 @@
         <p class="landing-kicker">Abbonamento</p>
         <h1>Piani e prezzi</h1>
         <p class="muted">
-          Stesso accesso completo alla piattaforma. Scegli solo come preferisci pagare.
+          Stesso accesso completo alla piattaforma. Scegli come preferisci pagare: il pagamento apre la registrazione.
         </p>
+        <p id="pricingStatus" class="muted"></p>
       </section>
 
       <section class="landing-grid pricing-placeholder-grid">
@@ -38,7 +39,7 @@
             <li>Timing giorni del mese</li>
             <li>Aggiornamenti feed inclusi</li>
           </ul>
-          <a class="landing-btn primary" href="/registrati?plan=mensile">Scegli Mensile</a>
+          <button type="button" class="landing-btn primary checkout-btn" data-plan="mensile">Paga e continua</button>
         </article>
 
         <article class="card pricing-card pricing-card-featured">
@@ -51,7 +52,7 @@
             <li>~18,33 € al mese equivalenti</li>
             <li>Ideale per uso continuativo</li>
           </ul>
-          <a class="landing-btn primary" href="/registrati?plan=annuale">Scegli Annuale</a>
+          <button type="button" class="landing-btn primary checkout-btn" data-plan="annuale">Paga e continua</button>
         </article>
 
         <article class="card pricing-card">
@@ -64,7 +65,7 @@
             <li>Nessun rinnovo ricorrente</li>
             <li>Per chi vuole impegno definitivo</li>
           </ul>
-          <a class="landing-btn primary" href="/registrati?plan=lifetime">Scegli Lifetime</a>
+          <button type="button" class="landing-btn primary checkout-btn" data-plan="lifetime">Paga e continua</button>
         </article>
       </section>
 
@@ -77,5 +78,7 @@
         </p>
       </section>
     </main>
+
+    <script src="./prezzi.js?v=20260722-stripe-92"></script>
   </body>
 </html>

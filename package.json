@@ -10,5 +10,8 @@
   "scripts": {
     "start": "node backend/server.js",
     "start:prod": "set NODE_ENV=production&& node backend/server.js"
+  },
+  "dependencies": {
+    "stripe": "^18.0.0"
   }
 }

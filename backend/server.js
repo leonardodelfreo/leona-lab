@@ -7,13 +7,47 @@ const { URL } = require("url");
 const HOST = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 const PORT = Number(process.env.PORT || 8787);
 const ROOT_DIR = path.resolve(__dirname, "..");
-const DATA_DIR = path.join(ROOT_DIR, "data");
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(ROOT_DIR, "data");
 const MACRO_CACHE_FILE = path.join(DATA_DIR, "macro-cache.json");
 const PRICE_CACHE_PREFIX = path.join(DATA_DIR, "price-");
 const COT_CACHE_PREFIX = path.join(DATA_DIR, "cot-");
 const USER_PREFS_DIR = path.join(DATA_DIR, "user-prefs");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
+const PAID_SESSIONS_FILE = path.join(DATA_DIR, "paid-sessions.json");
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
+const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
+const APP_BASE_URL = String(process.env.APP_BASE_URL || "").trim().replace(/\/$/, "");
+const REQUIRE_PAYMENT = Boolean(STRIPE_SECRET_KEY) && String(process.env.ALLOW_FREE_REGISTER || "").toLowerCase() !== "true";
+
+const PLAN_CATALOG = {
+  mensile: {
+    id: "mensile",
+    label: "Mensile",
+    mode: "subscription",
+    amountCents: 2490,
+    interval: "month",
+    description: "Leona.Lab — accesso completo mensile",
+  },
+  annuale: {
+    id: "annuale",
+    label: "Annuale",
+    mode: "subscription",
+    amountCents: 21990,
+    interval: "year",
+    description: "Leona.Lab — accesso completo annuale",
+  },
+  lifetime: {
+    id: "lifetime",
+    label: "Lifetime",
+    mode: "payment",
+    amountCents: 299990,
+    interval: null,
+    description: "Leona.Lab — accesso lifetime una tantum",
+  },
+};
 
 const MACRO_REFRESH_MS_OK = 5 * 60 * 1000;
 const MACRO_REFRESH_MS_DEGRADED = 60 * 1000;
@@ -166,10 +200,68 @@ function writeUsers(users) {
         email: normalizeEmail(u.email) || "",
         passwordHash: String(u.passwordHash || ""),
         displayName: String(u.displayName || u.username || "").trim(),
+        plan: String(u.plan || "mensile"),
+        stripeSessionId: u.stripeSessionId || null,
+        stripeCustomerId: u.stripeCustomerId || null,
+        paidAt: u.paidAt || null,
+        createdAt: u.createdAt || null,
       }))
       .filter((u) => u.username && u.passwordHash),
   };
   fs.writeFileSync(USERS_FILE, JSON.stringify(payload, null, 2), "utf8");
+}
+
+function readPaidSessions() {
+  try {
+    if (!fs.existsSync(PAID_SESSIONS_FILE)) return {};
+    const parsed = JSON.parse(fs.readFileSync(PAID_SESSIONS_FILE, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePaidSessions(map) {
+  ensureDataDir();
+  fs.writeFileSync(PAID_SESSIONS_FILE, JSON.stringify(map || {}, null, 2), "utf8");
+}
+
+function getStripe() {
+  if (!STRIPE_SECRET_KEY) return null;
+  // Lazy require so the server still boots without the package in pure-local no-pay mode.
+  // eslint-disable-next-line global-require
+  const Stripe = require("stripe");
+  return new Stripe(STRIPE_SECRET_KEY);
+}
+
+function resolveAppBaseUrl(req) {
+  if (APP_BASE_URL) return APP_BASE_URL;
+  const proto = String(req.headers["x-forwarded-proto"] || "http").split(",")[0].trim();
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || `${HOST}:${PORT}`).split(",")[0].trim();
+  return `${proto}://${host}`;
+}
+
+async function verifyCheckoutSession(sessionId) {
+  const stripe = getStripe();
+  if (!stripe) throw new Error("Stripe non configurato");
+  const session = await stripe.checkout.sessions.retrieve(String(sessionId || ""));
+  const paid =
+    session.payment_status === "paid" ||
+    session.status === "complete" ||
+    (session.mode === "subscription" && ["paid", "no_payment_required"].includes(session.payment_status));
+  if (!paid) {
+    throw new Error("pagamento non completato");
+  }
+  const plan = String(session.metadata?.plan || "").toLowerCase();
+  if (!PLAN_CATALOG[plan]) throw new Error("piano non valido nella sessione");
+  return {
+    id: session.id,
+    email: normalizeEmail(session.customer_details?.email || session.customer_email || ""),
+    plan,
+    customerId: session.customer || null,
+    mode: session.mode,
+    paymentStatus: session.payment_status,
+  };
 }
 
 function getPriceCacheFile(assetId) {
@@ -1086,6 +1178,11 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, {
       ok: true,
       assetId: String(assetId).toUpperCase(),
+      billing: {
+        stripeConfigured: Boolean(STRIPE_SECRET_KEY),
+        requirePayment: REQUIRE_PAYMENT,
+      },
+      dataDir: DATA_DIR,
       macro: {
         mode: macroState.mode,
         source: macroState.source,
@@ -1105,6 +1202,80 @@ const server = http.createServer(async (req, res) => {
         source: cotCache?.source || "--",
         fetchedAt: cotCache?.fetchedAt || null,
       },
+    });
+  }
+
+  if (pathname === "/api/checkout" && req.method === "POST") {
+    try {
+      const stripe = getStripe();
+      if (!stripe) {
+        return json(res, 503, {
+          ok: false,
+          error: "Pagamenti non ancora configurati. Aggiungi STRIPE_SECRET_KEY.",
+          requirePayment: REQUIRE_PAYMENT,
+        });
+      }
+      const body = await readJsonBody(req);
+      const planId = String(body?.plan || "").trim().toLowerCase();
+      const plan = PLAN_CATALOG[planId];
+      if (!plan) return json(res, 400, { ok: false, error: "piano non valido" });
+      const base = resolveAppBaseUrl(req);
+      const priceData = {
+        currency: "eur",
+        product_data: {
+          name: `Leona.Lab ${plan.label}`,
+          description: plan.description,
+        },
+        unit_amount: plan.amountCents,
+      };
+      if (plan.mode === "subscription") {
+        priceData.recurring = { interval: plan.interval };
+      }
+      const session = await stripe.checkout.sessions.create({
+        mode: plan.mode,
+        line_items: [{ price_data: priceData, quantity: 1 }],
+        success_url: `${base}/registrati?plan=${encodeURIComponent(plan.id)}&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${base}/prezzi?canceled=1`,
+        metadata: { plan: plan.id },
+        allow_promotion_codes: true,
+        billing_address_collection: "auto",
+      });
+      return json(res, 200, { ok: true, url: session.url, sessionId: session.id, plan: plan.id });
+    } catch (error) {
+      return json(res, 400, { ok: false, error: error?.message || "checkout fallito" });
+    }
+  }
+
+  if (pathname === "/api/checkout/session" && req.method === "GET") {
+    try {
+      const sessionId = requestUrl.searchParams.get("session_id") || "";
+      if (!sessionId) return json(res, 400, { ok: false, error: "session_id mancante" });
+      const verified = await verifyCheckoutSession(sessionId);
+      const used = readPaidSessions()[sessionId];
+      return json(res, 200, {
+        ok: true,
+        paid: true,
+        used: Boolean(used?.usedAt),
+        email: verified.email || null,
+        plan: verified.plan,
+        sessionId: verified.id,
+      });
+    } catch (error) {
+      return json(res, 400, { ok: false, error: error?.message || "sessione non valida" });
+    }
+  }
+
+  if (pathname === "/api/billing/config" && req.method === "GET") {
+    return json(res, 200, {
+      ok: true,
+      stripeEnabled: Boolean(STRIPE_SECRET_KEY),
+      requirePayment: REQUIRE_PAYMENT,
+      plans: Object.values(PLAN_CATALOG).map((p) => ({
+        id: p.id,
+        label: p.label,
+        amountCents: p.amountCents,
+        mode: p.mode,
+      })),
     });
   }
 
@@ -1152,8 +1323,31 @@ const server = http.createServer(async (req, res) => {
       const password = String(body?.password || "");
       const displayName = String(body?.displayName || username || email).trim();
       const plan = String(body?.plan || "mensile").trim().toLowerCase();
-      const allowedPlans = ["mensile", "annuale", "lifetime", "starter", "pro", "desk"];
-      const normalizedPlan = allowedPlans.includes(plan) ? plan : "mensile";
+      const sessionId = String(body?.sessionId || body?.session_id || "").trim();
+      const allowedPlans = Object.keys(PLAN_CATALOG);
+      let normalizedPlan = allowedPlans.includes(plan) ? plan : "mensile";
+      let stripeCustomerId = null;
+      let paidAt = null;
+      let stripeSessionId = null;
+
+      if (REQUIRE_PAYMENT) {
+        if (!sessionId) {
+          return json(res, 402, { ok: false, error: "pagamento richiesto: completa il checkout prima della registrazione" });
+        }
+        const paidMap = readPaidSessions();
+        if (paidMap[sessionId]?.usedAt) {
+          return json(res, 409, { ok: false, error: "questa sessione di pagamento e gia stata usata" });
+        }
+        const verified = await verifyCheckoutSession(sessionId);
+        if (verified.email && email && verified.email !== email) {
+          return json(res, 400, { ok: false, error: "usa la stessa email del pagamento Stripe" });
+        }
+        normalizedPlan = verified.plan;
+        stripeCustomerId = verified.customerId;
+        paidAt = new Date().toISOString();
+        stripeSessionId = verified.id;
+      }
+
       if (!email || !email.includes("@")) {
         return json(res, 400, { ok: false, error: "email obbligatoria" });
       }
@@ -1179,9 +1373,23 @@ const server = http.createServer(async (req, res) => {
         passwordHash: hashPassword(password),
         displayName: displayName || username,
         plan: normalizedPlan,
+        stripeSessionId,
+        stripeCustomerId,
+        paidAt,
         createdAt: new Date().toISOString(),
       });
       writeUsers(users);
+
+      if (REQUIRE_PAYMENT && stripeSessionId) {
+        const paidMap = readPaidSessions();
+        paidMap[stripeSessionId] = {
+          usedAt: new Date().toISOString(),
+          username,
+          email,
+          plan: normalizedPlan,
+        };
+        writePaidSessions(paidMap);
+      }
 
       const token = crypto.randomBytes(24).toString("hex");
       const expiresAt = Date.now() + SESSION_TTL_MS;

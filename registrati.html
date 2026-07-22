@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260722-pricing-91" />
+    <link rel="stylesheet" href="./styles.css?v=20260722-stripe-92" />
   </head>
   <body class="landing-body auth-page">
     <main class="landing-shell auth-page-shell">
@@ -24,10 +24,10 @@
         <p class="landing-kicker">Crea account</p>
         <h1>Registrati</h1>
         <p class="muted">
-          Piano scelto: <strong id="selectedPlanLabel">Mensile</strong>
+          Piano: <strong id="selectedPlanLabel">Mensile</strong>
           (<span id="selectedPlanPrice">24,90 € / mese</span>).
-          Crea l'account e entra in piattaforma.
         </p>
+        <p id="paymentGateStatus" class="muted">Verifica pagamento in corso...</p>
         <div class="auth-form">
           <label class="auth-label" for="regEmail">Email</label>
           <input id="regEmail" type="email" placeholder="nome@email.com" autocomplete="email" />
@@ -37,7 +37,7 @@
           <input id="regName" type="text" placeholder="Come vuoi apparire" autocomplete="nickname" />
           <label class="auth-label" for="regPassword">Password</label>
           <input id="regPassword" type="password" placeholder="Minimo 6 caratteri" autocomplete="new-password" />
-          <button id="regSubmitBtn" class="auth-cta" type="button">Crea account ed entra</button>
+          <button id="regSubmitBtn" class="auth-cta" type="button" disabled>Crea account ed entra</button>
           <small id="regStatus" class="muted">Dopo la registrazione apri la dashboard.</small>
         </div>
         <p class="auth-switch muted">
@@ -47,6 +47,6 @@
       </section>
     </main>
 
-    <script src="./registrati.js?v=20260722-pricing-91"></script>
+    <script src="./registrati.js?v=20260722-stripe-92"></script>
   </body>
 </html>
