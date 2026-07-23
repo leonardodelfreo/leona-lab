@@ -18,6 +18,7 @@ const PLAN_INFO = {
 
 let requirePayment = false;
 let checkoutSessionId = "";
+let adminFreeAccess = false;
 
 function getSelectedPlan() {
   const params = new URLSearchParams(window.location.search);
@@ -112,7 +113,7 @@ async function doRegister() {
     setStatus("Inserisci email e password", "down");
     return;
   }
-  if (requirePayment && !checkoutSessionId) {
+  if (requirePayment && !checkoutSessionId && !adminFreeAccess) {
     setStatus("Completa prima il pagamento da /prezzi", "down");
     return;
   }
@@ -137,19 +138,26 @@ async function doRegister() {
   }
 }
 
-async function initRegisterGate() {
+async function refreshAdminAccess() {
+  const email = emailEl?.value?.trim() || "";
+  if (!email.includes("@")) {
+    adminFreeAccess = false;
+    return false;
+  }
+  try {
+    const result = await apiJson(`/api/auth/admin-check?email=${encodeURIComponent(email)}`);
+    adminFreeAccess = Boolean(result.admin);
+  } catch {
+    adminFreeAccess = false;
+  }
+  return adminFreeAccess;
+}
+
+async function applyRegisterGate() {
   const selectedPlan = getSelectedPlan();
   const info = PLAN_INFO[selectedPlan];
   if (planLabelEl) planLabelEl.textContent = info.label;
   if (planPriceEl) planPriceEl.textContent = info.price;
-  checkoutSessionId = getSessionId();
-
-  try {
-    const config = await apiJson("/api/billing/config");
-    requirePayment = Boolean(config.requirePayment);
-  } catch {
-    requirePayment = false;
-  }
 
   if (!requirePayment) {
     setGate("Modalita sviluppo: registrazione libera (Stripe non attivo).", "up");
@@ -157,8 +165,17 @@ async function initRegisterGate() {
     return;
   }
 
+  await refreshAdminAccess();
+  if (adminFreeAccess) {
+    if (planLabelEl) planLabelEl.textContent = "Admin";
+    if (planPriceEl) planPriceEl.textContent = "Accesso gratuito lifetime";
+    setGate("Account amministratore: registrazione gratuita senza pagamento.", "up");
+    if (submitBtn) submitBtn.disabled = false;
+    return;
+  }
+
   if (!checkoutSessionId) {
-    setGate("Per registrarti paga prima un piano su Piani.", "down");
+    setGate("Per registrarti paga prima un piano su Piani. (Admin: inserisci la tua email admin)", "down");
     if (submitBtn) submitBtn.disabled = true;
     return;
   }
@@ -186,8 +203,23 @@ async function initRegisterGate() {
   }
 }
 
+async function initRegisterGate() {
+  checkoutSessionId = getSessionId();
+  try {
+    const config = await apiJson("/api/billing/config");
+    requirePayment = Boolean(config.requirePayment);
+  } catch {
+    requirePayment = false;
+  }
+  await applyRegisterGate();
+}
+
 submitBtn?.addEventListener("click", doRegister);
-emailEl?.addEventListener("blur", suggestUsernameFromEmail);
+emailEl?.addEventListener("blur", () => {
+  suggestUsernameFromEmail();
+  applyRegisterGate();
+});
+emailEl?.addEventListener("change", () => applyRegisterGate());
 passwordEl?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") doRegister();
 });

@@ -21,6 +21,16 @@ const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const APP_BASE_URL = String(process.env.APP_BASE_URL || "").trim().replace(/\/$/, "");
 const REQUIRE_PAYMENT = Boolean(STRIPE_SECRET_KEY) && String(process.env.ALLOW_FREE_REGISTER || "").toLowerCase() !== "true";
+const ADMIN_EMAILS = new Set(
+  String(process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+function isAdminEmail(email) {
+  return ADMIN_EMAILS.has(normalizeEmail(email));
+}
 
 const PLAN_CATALOG = {
   mensile: {
@@ -180,12 +190,24 @@ function readUsers() {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed?.users)) return [];
     return parsed.users
-      .map((u) => ({
-        username: String(u.username || "").toLowerCase(),
-        email: normalizeEmail(u.email) || (String(u.username || "").includes("@") ? String(u.username || "").toLowerCase() : ""),
-        passwordHash: String(u.passwordHash || ""),
-        displayName: String(u.displayName || u.username || ""),
-      }))
+      .map((u) => {
+        const email =
+          normalizeEmail(u.email) ||
+          (String(u.username || "").includes("@") ? String(u.username || "").toLowerCase() : "");
+        const role = String(u.role || (isAdminEmail(email) ? "admin" : "user"));
+        return {
+          username: String(u.username || "").toLowerCase(),
+          email,
+          passwordHash: String(u.passwordHash || ""),
+          displayName: String(u.displayName || u.username || ""),
+          plan: String(u.plan || (role === "admin" ? "lifetime" : "mensile")),
+          role,
+          stripeSessionId: u.stripeSessionId || null,
+          stripeCustomerId: u.stripeCustomerId || null,
+          paidAt: u.paidAt || null,
+          createdAt: u.createdAt || null,
+        };
+      })
       .filter((u) => u.username && u.passwordHash);
   } catch {
     return [];
@@ -195,20 +217,39 @@ function readUsers() {
 function writeUsers(users) {
   const payload = {
     users: (Array.isArray(users) ? users : [])
-      .map((u) => ({
-        username: String(u.username || "").trim().toLowerCase(),
-        email: normalizeEmail(u.email) || "",
-        passwordHash: String(u.passwordHash || ""),
-        displayName: String(u.displayName || u.username || "").trim(),
-        plan: String(u.plan || "mensile"),
-        stripeSessionId: u.stripeSessionId || null,
-        stripeCustomerId: u.stripeCustomerId || null,
-        paidAt: u.paidAt || null,
-        createdAt: u.createdAt || null,
-      }))
+      .map((u) => {
+        const email = normalizeEmail(u.email) || "";
+        const role = String(u.role || (isAdminEmail(email) ? "admin" : "user"));
+        return {
+          username: String(u.username || "").trim().toLowerCase(),
+          email,
+          passwordHash: String(u.passwordHash || ""),
+          displayName: String(u.displayName || u.username || "").trim(),
+          plan: String(u.plan || (role === "admin" ? "lifetime" : "mensile")),
+          role,
+          stripeSessionId: u.stripeSessionId || null,
+          stripeCustomerId: u.stripeCustomerId || null,
+          paidAt: u.paidAt || null,
+          createdAt: u.createdAt || null,
+        };
+      })
       .filter((u) => u.username && u.passwordHash),
   };
   fs.writeFileSync(USERS_FILE, JSON.stringify(payload, null, 2), "utf8");
+}
+
+function ensureAdminPrivileges(user) {
+  if (!user || !isAdminEmail(user.email)) return false;
+  let changed = false;
+  if (user.role !== "admin") {
+    user.role = "admin";
+    changed = true;
+  }
+  if (user.plan !== "lifetime") {
+    user.plan = "lifetime";
+    changed = true;
+  }
+  return changed;
 }
 
 function readPaidSessions() {
@@ -1325,6 +1366,14 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  if (pathname === "/api/auth/admin-check" && req.method === "GET") {
+    const email = normalizeEmail(requestUrl.searchParams.get("email") || "");
+    return json(res, 200, {
+      ok: true,
+      admin: Boolean(email && isAdminEmail(email)),
+    });
+  }
+
   if (pathname === "/api/auth/login" && req.method === "POST") {
     try {
       const body = await readJsonBody(req);
@@ -1337,6 +1386,9 @@ const server = http.createServer(async (req, res) => {
       const found = users.find((u) => u.email === loginId || u.username === loginId);
       if (!found || found.passwordHash !== hashPassword(password)) {
         return json(res, 401, { ok: false, error: "credenziali non valide" });
+      }
+      if (ensureAdminPrivileges(found)) {
+        writeUsers(users);
       }
       const token = crypto.randomBytes(24).toString("hex");
       const expiresAt = Date.now() + SESSION_TTL_MS;
@@ -1353,6 +1405,8 @@ const server = http.createServer(async (req, res) => {
           id: found.username,
           email: found.email || null,
           name: found.displayName || found.username,
+          plan: found.plan || null,
+          role: found.role || "user",
         },
       });
     } catch (error) {
@@ -1375,8 +1429,18 @@ const server = http.createServer(async (req, res) => {
       let stripeCustomerId = null;
       let paidAt = null;
       let stripeSessionId = null;
+      let role = "user";
 
-      if (REQUIRE_PAYMENT) {
+      if (!email || !email.includes("@")) {
+        return json(res, 400, { ok: false, error: "email obbligatoria" });
+      }
+
+      const adminFree = isAdminEmail(email);
+      if (adminFree) {
+        normalizedPlan = "lifetime";
+        role = "admin";
+        paidAt = new Date().toISOString();
+      } else if (REQUIRE_PAYMENT) {
         if (!sessionId) {
           return json(res, 402, { ok: false, error: "pagamento richiesto: completa il checkout prima della registrazione" });
         }
@@ -1394,9 +1458,6 @@ const server = http.createServer(async (req, res) => {
         stripeSessionId = verified.id;
       }
 
-      if (!email || !email.includes("@")) {
-        return json(res, 400, { ok: false, error: "email obbligatoria" });
-      }
       if (!username || !password) {
         return json(res, 400, { ok: false, error: "username e password obbligatori" });
       }
@@ -1419,6 +1480,7 @@ const server = http.createServer(async (req, res) => {
         passwordHash: hashPassword(password),
         displayName: displayName || username,
         plan: normalizedPlan,
+        role,
         stripeSessionId,
         stripeCustomerId,
         paidAt,
@@ -1453,6 +1515,7 @@ const server = http.createServer(async (req, res) => {
           email,
           name: displayName || username,
           plan: normalizedPlan,
+          role,
         },
       });
     } catch (error) {
