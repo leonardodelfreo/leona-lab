@@ -2227,8 +2227,8 @@ function buildSeasonalityPathSeries(prices, yearsSetting) {
 }
 
 /**
- * Picchi di rialzo/ribasso sulla media stagionale giornaliera reale.
- * Usa finestra locale + prominenza, con wrap-around sull'anno.
+ * Picchi/fondi su UNA sola serie di chiusure EOD (media stagionale).
+ * Un giorno non puo essere sia massimo sia minimo; i turning point si alternano.
  */
 function findSeasonalTurningPoints(avgPath, dayKeys, labels, options = {}) {
   const values = Array.isArray(avgPath) ? avgPath : [];
@@ -2237,10 +2237,11 @@ function findSeasonalTurningPoints(avgPath, dayKeys, labels, options = {}) {
 
   const window = Math.max(5, Number(options.window) || 8);
   const minSeparation = Math.max(8, Number(options.minSeparation) || 14);
-  const maxEach = Math.max(3, Number(options.maxEach) || 6);
+  const maxEach = Math.max(3, Number(options.maxEach) || 8);
+  const minProminence = Number.isFinite(options.minProminence) ? options.minProminence : 0.08;
 
   const at = (i) => values[((i % n) + n) % n];
-  const candidates = [];
+  const raw = [];
 
   for (let i = 0; i < n; i += 1) {
     const v = values[i];
@@ -2252,14 +2253,21 @@ function findSeasonalTurningPoints(avgPath, dayKeys, labels, options = {}) {
     for (let d = 1; d <= window; d += 1) {
       const left = at(i - d);
       const right = at(i + d);
-      if (left > v || right > v) isPeak = false;
-      if (left < v || right < v) isTrough = false;
+      if (!(left <= v && right <= v)) isPeak = false;
+      if (!(left >= v && right >= v)) isTrough = false;
       neighborMin = Math.min(neighborMin, left, right);
       neighborMax = Math.max(neighborMax, left, right);
       if (!isPeak && !isTrough) break;
     }
+    // Stesso giorno: se ambigue entrambe, scegli solo il tipo con prominenza maggiore.
+    if (isPeak && isTrough) {
+      const peakProm = v - neighborMin;
+      const troughProm = neighborMax - v;
+      if (peakProm >= troughProm) isTrough = false;
+      else isPeak = false;
+    }
     if (isPeak) {
-      candidates.push({
+      raw.push({
         type: "peak",
         idx: i,
         value: v,
@@ -2268,7 +2276,7 @@ function findSeasonalTurningPoints(avgPath, dayKeys, labels, options = {}) {
         label: labels[i],
       });
     } else if (isTrough) {
-      candidates.push({
+      raw.push({
         type: "trough",
         idx: i,
         value: v,
@@ -2279,24 +2287,64 @@ function findSeasonalTurningPoints(avgPath, dayKeys, labels, options = {}) {
     }
   }
 
-  function pickBest(type) {
-    const sorted = candidates
-      .filter((c) => c.type === type && Number.isFinite(c.prominence) && c.prominence > 0.05)
-      .sort((a, b) => b.prominence - a.prominence);
-    const picked = [];
-    for (const c of sorted) {
-      const tooClose = picked.some((p) => {
-        const dist = Math.min(Math.abs(p.idx - c.idx), n - Math.abs(p.idx - c.idx));
-        return dist < minSeparation;
-      });
-      if (tooClose) continue;
-      picked.push(c);
-      if (picked.length >= maxEach) break;
-    }
-    return picked.sort((a, b) => a.idx - b.idx);
+  // Ordina per indice e costruisci un zigzag alternato (peak/trough/peak...).
+  const byIdx = [...raw]
+    .filter((c) => Number.isFinite(c.prominence) && c.prominence >= minProminence)
+    .sort((a, b) => a.idx - b.idx || b.prominence - a.prominence);
+
+  // Dedup stretto per giorno: un solo evento per idx.
+  const uniqueByDay = [];
+  const seenIdx = new Set();
+  for (const c of byIdx) {
+    if (seenIdx.has(c.idx)) continue;
+    seenIdx.add(c.idx);
+    uniqueByDay.push(c);
   }
 
-  return { peaks: pickBest("peak"), troughs: pickBest("trough") };
+  // Seleziona candidati forti con distanza minima, poi forza alternanza.
+  const strong = [...uniqueByDay].sort((a, b) => b.prominence - a.prominence);
+  const spaced = [];
+  for (const c of strong) {
+    const tooClose = spaced.some((p) => {
+      const dist = Math.min(Math.abs(p.idx - c.idx), n - Math.abs(p.idx - c.idx));
+      return dist < minSeparation;
+    });
+    if (tooClose) continue;
+    spaced.push(c);
+    if (spaced.length >= maxEach * 2) break;
+  }
+  spaced.sort((a, b) => a.idx - b.idx);
+
+  const alternating = [];
+  for (const c of spaced) {
+    const prev = alternating[alternating.length - 1];
+    if (!prev) {
+      alternating.push(c);
+      continue;
+    }
+    if (prev.type === c.type) {
+      // Due massimi (o due minimi) di fila: tieni il piu prominente, scarta l'altro.
+      if (c.prominence > prev.prominence) {
+        alternating[alternating.length - 1] = c;
+      }
+      continue;
+    }
+    alternating.push(c);
+  }
+
+  // Se inizia e finisce con lo stesso tipo sul wrap-around annuale, rimuovi il piu debole.
+  if (alternating.length >= 2) {
+    const first = alternating[0];
+    const last = alternating[alternating.length - 1];
+    if (first.type === last.type) {
+      if (first.prominence >= last.prominence) alternating.pop();
+      else alternating.shift();
+    }
+  }
+
+  const peaks = alternating.filter((c) => c.type === "peak").slice(0, maxEach);
+  const troughs = alternating.filter((c) => c.type === "trough").slice(0, maxEach);
+  return { peaks, troughs };
 }
 
 function buildSeasonalityPayloadFromPrices(prices, yearsSetting) {
@@ -3502,22 +3550,15 @@ function renderSeasonalityInsights(seasonality, seasonalityStats, startMonth, ho
   const currentTiming = Array.isArray(dayTiming) ? dayTiming[currentMonth] : null;
   const focusLong = currentTiming?.bestLong;
   const focusShort = currentTiming?.bestShort;
-  const turningHigh = seasonalityPath?.highPath?.length
-    ? findSeasonalTurningPoints(seasonalityPath.highPath, seasonalityPath.dayKeys || [], seasonalityPath.labels || [], {
+  const turningClose = seasonalityPath?.avgPath?.length
+    ? findSeasonalTurningPoints(seasonalityPath.avgPath, seasonalityPath.dayKeys || [], seasonalityPath.labels || [], {
         window: 8,
         minSeparation: 14,
         maxEach: 7,
       })
     : { peaks: [], troughs: [] };
-  const turningLow = seasonalityPath?.lowPath?.length
-    ? findSeasonalTurningPoints(seasonalityPath.lowPath, seasonalityPath.dayKeys || [], seasonalityPath.labels || [], {
-        window: 8,
-        minSeparation: 14,
-        maxEach: 7,
-      })
-    : { peaks: [], troughs: [] };
-  const peaks = turningHigh.peaks;
-  const troughs = turningLow.troughs;
+  const peaks = turningClose.peaks;
+  const troughs = turningClose.troughs;
 
   function nextTurning(list) {
     if (!list.length || todayIdx < 0) return list[0] || null;
@@ -3539,19 +3580,19 @@ function renderSeasonalityInsights(seasonality, seasonalityStats, startMonth, ho
 
   const cards = [
     {
-      label: "Prossimo massimo (Max)",
+      label: "Prossimo massimo (chiusura)",
       value: nextPeak?.label || "--",
       note: nextPeak
-        ? `Tra ~${nextPeak.daysAhead} gg · Max storico ${fmtNum(nextPeak.value, 2)}`
-        : "Picchi non rilevati sulla curva Max",
+        ? `Tra ~${nextPeak.daysAhead} gg · chiusura media ${fmtNum(nextPeak.value, 2)}`
+        : "Picchi non rilevati sulla media EOD",
       cls: "up",
     },
     {
-      label: "Prossimo minimo (Min)",
+      label: "Prossimo minimo (chiusura)",
       value: nextTrough?.label || "--",
       note: nextTrough
-        ? `Tra ~${nextTrough.daysAhead} gg · Min storico ${fmtNum(nextTrough.value, 2)}`
-        : "Fondi non rilevati sulla curva Min",
+        ? `Tra ~${nextTrough.daysAhead} gg · chiusura media ${fmtNum(nextTrough.value, 2)}`
+        : "Fondi non rilevati sulla media EOD",
       cls: "down",
     },
     {
@@ -3961,7 +4002,7 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
   }
 
   if (state.seasonalityMode === "line") {
-    // Price action stagionale: Max sopra media, Min sotto media (dati reali MM-DD).
+    // Una sola andatura su chiusure EOD medie: un giorno = o massimo o minimo, mai entrambi.
     const usePath = (seasonalityPath?.avgPath?.length || 0) >= 2;
     const lineLabels = usePath ? seasonalityPath.labels : [];
     const avgPath = usePath ? seasonalityPath.avgPath || [] : [];
@@ -3971,91 +4012,79 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
     const dayKeys = usePath ? seasonalityPath.dayKeys || [] : [];
     const currentYearTrace = usePath ? seasonalityPath.currentYearTrace : null;
 
-    const peakTurning = usePath && highPath.length
-      ? findSeasonalTurningPoints(highPath, dayKeys, lineLabels, { window: 8, minSeparation: 14, maxEach: 7 })
+    const turning = usePath
+      ? findSeasonalTurningPoints(avgPath, dayKeys, lineLabels, { window: 8, minSeparation: 14, maxEach: 7 })
       : { peaks: [], troughs: [] };
-    const troughTurning = usePath && lowPath.length
-      ? findSeasonalTurningPoints(lowPath, dayKeys, lineLabels, { window: 8, minSeparation: 14, maxEach: 7 })
-      : { peaks: [], troughs: [] };
+    const peaks = turning.peaks;
+    const troughs = turning.troughs;
 
-    // Massimi = picchi della curva MAX (sopra la media); minimi = fondi della curva MIN (sotto la media).
-    const peaks = peakTurning.peaks
-      .map((p) => ({
-        ...p,
-        avg: avgPath[p.idx],
-        stretch: Number.isFinite(avgPath[p.idx]) ? p.value - avgPath[p.idx] : 0,
-      }))
-      .filter((p) => !Number.isFinite(p.avg) || p.value >= p.avg);
-    const troughs = troughTurning.troughs
-      .map((t) => ({
-        ...t,
-        avg: avgPath[t.idx],
-        stretch: Number.isFinite(avgPath[t.idx]) ? avgPath[t.idx] - t.value : 0,
-      }))
-      .filter((t) => !Number.isFinite(t.avg) || t.value <= t.avg);
+    // Safety: nessun indice condiviso tra max e min.
+    const troughIdx = new Set(troughs.map((t) => t.idx));
+    const cleanPeaks = peaks.filter((p) => !troughIdx.has(p.idx));
+    const peakIdx = new Set(cleanPeaks.map((p) => p.idx));
+    const cleanTroughs = troughs.filter((t) => !peakIdx.has(t.idx));
 
     if (chartTitleEl) {
       chartTitleEl.textContent = usePath
-        ? `Price action stagionale · Max/Media/Min giornalieri`
+        ? `Stagionalita EOD · chiusure medie · ${cleanPeaks.length} max / ${cleanTroughs.length} min`
         : "Stagionalita giornaliera";
     }
 
     const peakSeries = Array.from({ length: lineLabels.length }, () => null);
     const troughSeries = Array.from({ length: lineLabels.length }, () => null);
-    peaks.forEach((p) => {
+    cleanPeaks.forEach((p) => {
       peakSeries[p.idx] = p.value;
     });
-    troughs.forEach((t) => {
+    cleanTroughs.forEach((t) => {
       troughSeries[t.idx] = t.value;
     });
 
     const datasets = [];
 
+    // Range storico solo come contesto (non genera marker).
     if (usePath && highPath.length && lowPath.length) {
       datasets.push(
         {
-          label: "Max storico",
+          label: "Max storico (contesto)",
           data: highPath,
-          borderColor: "rgba(61, 214, 140, 0.95)",
-          backgroundColor: "rgba(61, 214, 140, 0.0)",
-          borderWidth: 1.8,
+          borderColor: "rgba(61, 214, 140, 0.28)",
+          borderWidth: 1,
           pointRadius: 0,
           fill: false,
           tension: 0.05,
-          order: 4,
+          order: 6,
         },
         {
           label: "Range Max-Min",
           data: lowPath,
-          borderColor: "rgba(227, 138, 90, 0.0)",
-          backgroundColor: "rgba(95, 140, 175, 0.14)",
+          borderColor: "rgba(0,0,0,0)",
+          backgroundColor: "rgba(95, 140, 175, 0.12)",
           borderWidth: 0,
           pointRadius: 0,
           fill: "-1",
           tension: 0.05,
-          order: 5,
+          order: 7,
         },
         {
-          label: "Min storico",
+          label: "Min storico (contesto)",
           data: lowPath,
-          borderColor: "rgba(227, 138, 90, 0.95)",
-          backgroundColor: "rgba(227, 138, 90, 0.0)",
-          borderWidth: 1.8,
+          borderColor: "rgba(227, 138, 90, 0.28)",
+          borderWidth: 1,
           pointRadius: 0,
           fill: false,
           tension: 0.05,
-          order: 4,
+          order: 6,
         }
       );
     }
 
     if (usePath) {
       datasets.push({
-        label: "Media",
+        label: "Chiusura media EOD",
         data: avgPath,
         borderColor: "#dceaf7",
         backgroundColor: "rgba(220,234,247,0.08)",
-        borderWidth: 2.2,
+        borderWidth: 2.6,
         pointRadius: 0,
         fill: false,
         tension: 0.05,
@@ -4077,9 +4106,9 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
       });
     }
 
-    if (usePath && peaks.length) {
+    if (usePath && cleanPeaks.length) {
       datasets.push({
-        label: "Picchi di rialzo (Max > Media)",
+        label: "Massimo (chiusura)",
         data: peakSeries,
         borderColor: "rgba(0,0,0,0)",
         backgroundColor: "#3dd68c",
@@ -4093,9 +4122,9 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
       });
     }
 
-    if (usePath && troughs.length) {
+    if (usePath && cleanTroughs.length) {
       datasets.push({
-        label: "Fondi di ribasso (Min < Media)",
+        label: "Minimo (chiusura)",
         data: troughSeries,
         borderColor: "rgba(0,0,0,0)",
         backgroundColor: "#e38a5a",
@@ -4129,8 +4158,8 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
       }
     }
 
-    const peakByIdx = new Map(peaks.map((p) => [p.idx, p]));
-    const troughByIdx = new Map(troughs.map((t) => [t.idx, t]));
+    const peakByIdx = new Map(cleanPeaks.map((p) => [p.idx, p]));
+    const troughByIdx = new Map(cleanTroughs.map((t) => [t.idx, t]));
 
     state.seasonalityChart = new Chart(canvas, {
       type: "line",
@@ -4147,7 +4176,7 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
             labels: {
               color: "#ecf5ff",
               usePointStyle: true,
-              filter: (item) => item.text !== "Range Max-Min",
+              filter: (item) => !["Range Max-Min", "Max storico (contesto)", "Min storico (contesto)"].includes(item.text),
             },
           },
           tooltip: {
@@ -4155,46 +4184,33 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
               title: (items) => {
                 const idx = items?.[0]?.dataIndex;
                 const label = lineLabels[idx];
-                return typeof label === "string" ? label : "";
+                return typeof label === "string" ? `${label} · chiusura EOD` : "Chiusura EOD";
               },
               label: (ctx) => {
                 const i = ctx.dataIndex;
                 const name = ctx.dataset.label;
-                if (name === "Range Max-Min") return null;
-                if (name === "Picchi di rialzo (Max > Media)") {
+                if (name === "Range Max-Min" || name === "Max storico (contesto)" || name === "Min storico (contesto)") return null;
+                if (name === "Massimo (chiusura)") {
                   const peak = peakByIdx.get(i);
                   if (!peak) return null;
-                  return `Picco Max ${fmtNum(peak.value, 2)} (+${fmtNum(peak.stretch, 2)} sopra media)`;
+                  return `Massimo di chiusura: ${fmtNum(peak.value, 2)}`;
                 }
-                if (name === "Fondi di ribasso (Min < Media)") {
+                if (name === "Minimo (chiusura)") {
                   const trough = troughByIdx.get(i);
                   if (!trough) return null;
-                  return `Fondo Min ${fmtNum(trough.value, 2)} (-${fmtNum(trough.stretch, 2)} sotto media)`;
+                  return `Minimo di chiusura: ${fmtNum(trough.value, 2)}`;
                 }
-                if (name === "Max storico") return `Max storico: ${fmtNum(ctx.raw, 2)}`;
-                if (name === "Min storico") return `Min storico: ${fmtNum(ctx.raw, 2)}`;
-                if (name === "Media") {
-                  const hi = highPath[i];
-                  const lo = lowPath[i];
-                  const up = Number.isFinite(hi) ? hi - ctx.raw : null;
-                  const down = Number.isFinite(lo) ? ctx.raw - lo : null;
-                  return `Media ${fmtNum(ctx.raw, 2)} | range +${fmtNum(up, 2)} / -${fmtNum(down, 2)}`;
+                if (name === "Chiusura media EOD") {
+                  return `Chiusura media: ${fmtNum(ctx.raw, 2)}`;
                 }
-                if (name === "Oggi") return `Oggi (media): ${fmtNum(ctx.raw, 2)}`;
+                if (name === "Oggi") return `Oggi (chiusura media): ${fmtNum(ctx.raw, 2)}`;
                 return `${name}: ${fmtNum(ctx.raw, 2)}`;
               },
               afterBody: (items) => {
                 const i = items?.[0]?.dataIndex;
                 if (!Number.isFinite(i)) return [];
-                if (peakByIdx.has(i)) return ["Zona di estensione rialzista storica (Max sopra Media)"];
-                if (troughByIdx.has(i)) return ["Zona di estensione ribassista storica (Min sotto Media)"];
-                const a = avgPath[i];
-                const h = highPath[i];
-                const l = lowPath[i];
-                if (Number.isFinite(a) && Number.isFinite(h) && Number.isFinite(l)) {
-                  if (h - a > a - l) return ["Bias range: estensione verso l'alto"];
-                  if (a - l > h - a) return ["Bias range: estensione verso il basso"];
-                }
+                if (peakByIdx.has(i)) return ["Giorno di massimo sulla media delle chiusure (non puo essere anche minimo)"];
+                if (troughByIdx.has(i)) return ["Giorno di minimo sulla media delle chiusure (non puo essere anche massimo)"];
                 return [];
               },
             },
