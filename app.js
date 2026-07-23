@@ -182,7 +182,7 @@ const state = {
   activePage: "cot",
   seasonalityYears: 10,
   seasonalityMode: "line",
-  seasonalityTraceMode: "current",
+  seasonalityTraceMode: "none",
   seasonalityStartMonth: new Date().getUTCMonth(),
   seasonalityHorizon: 3,
   refreshSeconds: 10,
@@ -2114,8 +2114,12 @@ function buildSeasonalityPathSeries(prices, yearsSetting) {
   });
 
   let years = [...byYear.keys()].sort((a, b) => a - b);
-  // Mantieni solo anni abbastanza completi.
-  years = years.filter((y) => (byYear.get(y)?.length || 0) >= 300);
+  const nowYear = new Date().getUTCFullYear();
+  // Anni storici: almeno ~6 mesi di sedute; anno corrente: basta un campione minimo.
+  years = years.filter((y) => {
+    const n = byYear.get(y)?.length || 0;
+    return y === nowYear ? n >= 20 : n >= 120;
+  });
   if (!years.length) {
     return { labels: [], avgPath: [], medianPath: [], lowPath: [], highPath: [], q1Path: [], q3Path: [], yearTraces: [], currentYearTrace: null, usedYears: [] };
   }
@@ -2220,6 +2224,79 @@ function buildSeasonalityPathSeries(prices, yearsSetting) {
     coveragePct,
     usedYears: normalizedEntries.map((e) => e.year),
   };
+}
+
+/**
+ * Picchi di rialzo/ribasso sulla media stagionale giornaliera reale.
+ * Usa finestra locale + prominenza, con wrap-around sull'anno.
+ */
+function findSeasonalTurningPoints(avgPath, dayKeys, labels, options = {}) {
+  const values = Array.isArray(avgPath) ? avgPath : [];
+  const n = values.length;
+  if (n < 15) return { peaks: [], troughs: [] };
+
+  const window = Math.max(5, Number(options.window) || 8);
+  const minSeparation = Math.max(8, Number(options.minSeparation) || 14);
+  const maxEach = Math.max(3, Number(options.maxEach) || 6);
+
+  const at = (i) => values[((i % n) + n) % n];
+  const candidates = [];
+
+  for (let i = 0; i < n; i += 1) {
+    const v = values[i];
+    if (!Number.isFinite(v)) continue;
+    let isPeak = true;
+    let isTrough = true;
+    let neighborMin = v;
+    let neighborMax = v;
+    for (let d = 1; d <= window; d += 1) {
+      const left = at(i - d);
+      const right = at(i + d);
+      if (left > v || right > v) isPeak = false;
+      if (left < v || right < v) isTrough = false;
+      neighborMin = Math.min(neighborMin, left, right);
+      neighborMax = Math.max(neighborMax, left, right);
+      if (!isPeak && !isTrough) break;
+    }
+    if (isPeak) {
+      candidates.push({
+        type: "peak",
+        idx: i,
+        value: v,
+        prominence: v - neighborMin,
+        key: dayKeys[i],
+        label: labels[i],
+      });
+    } else if (isTrough) {
+      candidates.push({
+        type: "trough",
+        idx: i,
+        value: v,
+        prominence: neighborMax - v,
+        key: dayKeys[i],
+        label: labels[i],
+      });
+    }
+  }
+
+  function pickBest(type) {
+    const sorted = candidates
+      .filter((c) => c.type === type && Number.isFinite(c.prominence) && c.prominence > 0.05)
+      .sort((a, b) => b.prominence - a.prominence);
+    const picked = [];
+    for (const c of sorted) {
+      const tooClose = picked.some((p) => {
+        const dist = Math.min(Math.abs(p.idx - c.idx), n - Math.abs(p.idx - c.idx));
+        return dist < minSeparation;
+      });
+      if (tooClose) continue;
+      picked.push(c);
+      if (picked.length >= maxEach) break;
+    }
+    return picked.sort((a, b) => a.idx - b.idx);
+  }
+
+  return { peaks: pickBest("peak"), troughs: pickBest("trough") };
 }
 
 function buildSeasonalityPayloadFromPrices(prices, yearsSetting) {
@@ -3425,8 +3502,49 @@ function renderSeasonalityInsights(seasonality, seasonalityStats, startMonth, ho
   const currentTiming = Array.isArray(dayTiming) ? dayTiming[currentMonth] : null;
   const focusLong = currentTiming?.bestLong;
   const focusShort = currentTiming?.bestShort;
+  const turning = seasonalityPath?.avgPath?.length
+    ? findSeasonalTurningPoints(seasonalityPath.avgPath, seasonalityPath.dayKeys || [], seasonalityPath.labels || [], {
+        window: 9,
+        minSeparation: 16,
+        maxEach: 6,
+      })
+    : { peaks: [], troughs: [] };
+
+  function nextTurning(list) {
+    if (!list.length || todayIdx < 0) return list[0] || null;
+    const n = seasonalityPath.avgPath.length;
+    let best = null;
+    let bestDist = Infinity;
+    list.forEach((item) => {
+      const dist = (item.idx - todayIdx + n) % n;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = { ...item, daysAhead: dist };
+      }
+    });
+    return best;
+  }
+
+  const nextPeak = nextTurning(turning.peaks);
+  const nextTrough = nextTurning(turning.troughs);
 
   const cards = [
+    {
+      label: "Prossimo massimo",
+      value: nextPeak?.label || "--",
+      note: nextPeak
+        ? `Tra ~${nextPeak.daysAhead} gg · indice ${fmtNum(nextPeak.value, 2)}`
+        : "Picchi non rilevati sulla media",
+      cls: "up",
+    },
+    {
+      label: "Prossimo minimo",
+      value: nextTrough?.label || "--",
+      note: nextTrough
+        ? `Tra ~${nextTrough.daysAhead} gg · indice ${fmtNum(nextTrough.value, 2)}`
+        : "Minimi non rilevati sulla media",
+      cls: "down",
+    },
     {
       label: "Best month",
       value: `${MONTH_LABELS[bestIdx]} ${seasonality[bestIdx] >= 0 ? "+" : ""}${fmtNum(seasonality[bestIdx], 2)}%`,
@@ -3783,9 +3901,11 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
   if (state.seasonalityChart) state.seasonalityChart.destroy();
   const canvas = document.getElementById("seasonalityChart");
   if (!canvas) return;
+  const chartTitleEl = document.getElementById("seasonalityChartTitle");
 
   if (!state.chartingAvailable || typeof Chart === "undefined") {
     canvas.style.display = "none";
+    if (chartTitleEl) chartTitleEl.textContent = "Stagionalita media mensile";
     if (seasonalityNumbersEl) {
       seasonalityNumbersEl.style.display = "grid";
       seasonalityNumbersEl.innerHTML = MONTH_LABELS.map((month, idx) => {
@@ -3806,6 +3926,7 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
 
   if (state.seasonalityMode === "numbers") {
     canvas.style.display = "none";
+    if (chartTitleEl) chartTitleEl.textContent = "Stagionalita media mensile";
     if (seasonalityNumbersEl) {
       seasonalityNumbersEl.style.display = "grid";
       seasonalityNumbersEl.innerHTML = MONTH_LABELS.map((month, idx) => {
@@ -3831,92 +3952,92 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
   }
 
   if (state.seasonalityMode === "line") {
-    const usePath = (seasonalityPath?.avgPath?.length || 0) > 20;
-    const lineLabels = usePath ? seasonalityPath.labels : MONTH_LABELS;
-    const lineData = usePath ? seasonalityPath.avgPath : seasonality;
+    // Linee: una curva media giornaliera + marker di massimi/minimi stagionali.
+    const usePath = (seasonalityPath?.avgPath?.length || 0) >= 2;
+    const lineLabels = usePath ? seasonalityPath.labels : [];
+    const lineData = usePath ? seasonalityPath.avgPath : [];
     const yIsIndex = usePath;
-    const lowPath = usePath ? seasonalityPath.lowPath || [] : [];
-    const highPath = usePath ? seasonalityPath.highPath || [] : [];
-    const q1Path = usePath ? seasonalityPath.q1Path || [] : [];
-    const q3Path = usePath ? seasonalityPath.q3Path || [] : [];
-    const medianPath = usePath ? seasonalityPath.medianPath || [] : [];
-    const yearTraces = usePath ? seasonalityPath.yearTraces || [] : [];
-    const currentYearTrace = usePath ? seasonalityPath.currentYearTrace : null;
     const dayKeys = usePath ? seasonalityPath.dayKeys || [] : [];
+    const currentYearTrace = usePath ? seasonalityPath.currentYearTrace : null;
+    const turning = usePath
+      ? findSeasonalTurningPoints(lineData, dayKeys, lineLabels, { window: 9, minSeparation: 16, maxEach: 6 })
+      : { peaks: [], troughs: [] };
+
+    if (chartTitleEl) {
+      chartTitleEl.textContent = usePath
+        ? `Stagionalita giornaliera · ${turning.peaks.length} massimi / ${turning.troughs.length} minimi`
+        : "Stagionalita giornaliera";
+    }
+
+    const peakSeries = Array.from({ length: lineLabels.length }, () => null);
+    const troughSeries = Array.from({ length: lineLabels.length }, () => null);
+    turning.peaks.forEach((p) => {
+      peakSeries[p.idx] = p.value;
+    });
+    turning.troughs.forEach((t) => {
+      troughSeries[t.idx] = t.value;
+    });
+
     const datasets = [];
 
-    if (usePath && highPath.length && lowPath.length) {
-      datasets.push(
-        {
-          label: "Max storico (anni selezionati)",
-          data: highPath,
-          borderColor: "rgba(122, 181, 215, 0.0)",
-          pointRadius: 0,
-          borderWidth: 0,
-          fill: false,
-        },
-        {
-          label: "Min/Max range",
-          data: lowPath,
-          borderColor: "rgba(122, 181, 215, 0.0)",
-          backgroundColor: "rgba(107, 162, 196, 0.16)",
-          pointRadius: 0,
-          borderWidth: 0,
-          fill: "-1",
-        }
-      );
-    }
-
-    if (usePath && q3Path.length && q1Path.length) {
-      datasets.push(
-        {
-          label: "Q3",
-          data: q3Path,
-          borderColor: "rgba(47,182,178,0.0)",
-          pointRadius: 0,
-          borderWidth: 0,
-          fill: false,
-        },
-        {
-          label: "IQR (Q1-Q3)",
-          data: q1Path,
-          borderColor: "rgba(47,182,178,0.0)",
-          backgroundColor: "rgba(47,182,178,0.18)",
-          pointRadius: 0,
-          borderWidth: 0,
-          fill: "-1",
-        }
-      );
-    }
-
-    if (usePath && medianPath.length) {
+    if (usePath) {
       datasets.push({
-        label: "Mediana storica",
-        data: medianPath,
-        borderColor: "rgba(211, 173, 103, 0.9)",
-        borderDash: [6, 4],
+        label: "Media stagionale giornaliera",
+        data: lineData,
+        borderColor: "#2fb6b2",
+        backgroundColor: "rgba(47,182,178,0.08)",
+        borderWidth: 2.4,
         pointRadius: 0,
-        borderWidth: 1.4,
         fill: false,
         tension: 0.12,
+        order: 3,
       });
     }
 
-    if (usePath && yearTraces.length && state.seasonalityTraceMode !== "none") {
-      const tracesToDraw = state.seasonalityTraceMode === "current"
-        ? (currentYearTrace ? [currentYearTrace] : [])
-        : yearTraces.slice(-Math.min(8, yearTraces.length));
-      tracesToDraw.forEach((trace) => {
-        const isCurrent = currentYearTrace && trace.year === currentYearTrace.year;
-        datasets.push({
-          label: isCurrent ? `Anno corrente ${trace.year}` : `Anno ${trace.year}`,
-          data: trace.values,
-          borderColor: isCurrent ? "rgba(233, 163, 94, 0.95)" : "rgba(159, 184, 204, 0.26)",
-          pointRadius: 0,
-          borderWidth: isCurrent ? 2.2 : 1,
-          fill: false,
-          tension: 0.08,
-        });
+    // Solo anno corrente come riferimento leggero (niente altre curve storiche).
+    if (usePath && currentYearTrace?.values?.length && state.seasonalityTraceMode !== "none") {
+      datasets.push({
+        label: `Anno corrente ${currentYearTrace.year}`,
+        data: currentYearTrace.values,
+        borderColor: "rgba(233, 163, 94, 0.75)",
+        pointRadius: 0,
+        borderWidth: 1.5,
+        borderDash: [5, 4],
+        fill: false,
+        tension: 0.08,
+        order: 4,
+      });
+    }
+
+    if (usePath && turning.peaks.length) {
+      datasets.push({
+        label: "Massimi stagionali",
+        data: peakSeries,
+        borderColor: "rgba(0,0,0,0)",
+        backgroundColor: "#3dd68c",
+        pointRadius: 5.5,
+        pointHoverRadius: 7,
+        pointStyle: "triangle",
+        pointRotation: 0,
+        borderWidth: 0,
+        showLine: false,
+        order: 1,
+      });
+    }
+
+    if (usePath && turning.troughs.length) {
+      datasets.push({
+        label: "Minimi stagionali",
+        data: troughSeries,
+        borderColor: "rgba(0,0,0,0)",
+        backgroundColor: "#e38a5a",
+        pointRadius: 5.5,
+        pointHoverRadius: 7,
+        pointStyle: "triangle",
+        pointRotation: 180,
+        borderWidth: 0,
+        showLine: false,
+        order: 1,
       });
     }
 
@@ -3924,46 +4045,24 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
       const today = new Date();
       const todayKey = `${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
       const todayIdx = dayKeys.indexOf(todayKey);
-      if (todayIdx >= 0) {
-        const todayMean = seasonalityPath.avgPath?.[todayIdx];
-        const todayCurrent = currentYearTrace?.values?.[todayIdx];
-        const markerMean = Array.from({ length: lineLabels.length }, (_, idx) => (idx === todayIdx ? todayMean : null));
-        const markerCurrent = Array.from({ length: lineLabels.length }, (_, idx) => (idx === todayIdx ? todayCurrent : null));
+      if (todayIdx >= 0 && Number.isFinite(lineData[todayIdx])) {
+        const markerToday = Array.from({ length: lineLabels.length }, (_, idx) => (idx === todayIdx ? lineData[todayIdx] : null));
         datasets.push({
-          label: "Oggi (media stagionale)",
-          data: markerMean,
+          label: "Oggi",
+          data: markerToday,
           borderColor: "rgba(0,0,0,0)",
           backgroundColor: "#f7d38b",
-          pointRadius: 4.5,
-          pointHoverRadius: 6,
+          pointRadius: 5,
+          pointHoverRadius: 6.5,
           borderWidth: 0,
           showLine: false,
+          order: 0,
         });
-        if (Number.isFinite(todayCurrent)) {
-          datasets.push({
-            label: "Oggi (anno corrente)",
-            data: markerCurrent,
-            borderColor: "rgba(0,0,0,0)",
-            backgroundColor: "#ff9f66",
-            pointRadius: 4.5,
-            pointHoverRadius: 6,
-            borderWidth: 0,
-            showLine: false,
-          });
-        }
       }
     }
 
-    datasets.push({
-      label: usePath ? "Media stagionale reale (indice base 100)" : "Rendimento medio mensile %",
-      data: lineData,
-      borderColor: "#2fb6b2",
-      backgroundColor: "rgba(47,182,178,0.16)",
-      borderWidth: 2.2,
-      pointRadius: usePath ? 0 : 2,
-      fill: false,
-      tension: usePath ? 0.14 : 0.25,
-    });
+    const peakByIdx = new Map(turning.peaks.map((p) => [p.idx, p]));
+    const troughByIdx = new Map(turning.troughs.map((t) => [t.idx, t]));
 
     state.seasonalityChart = new Chart(canvas, {
       type: "line",
@@ -3978,29 +4077,44 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
           legend: {
             labels: {
               color: "#ecf5ff",
-              filter: (item) => {
-                if (["Max storico (anni selezionati)", "Q3"].includes(item.text)) return false;
-                if (item.text.startsWith("Anno ") && !item.text.startsWith("Anno corrente")) return false;
-                return true;
-              },
+              usePointStyle: true,
             },
           },
           tooltip: {
             callbacks: {
+              title: (items) => {
+                const idx = items?.[0]?.dataIndex;
+                const label = lineLabels[idx];
+                const key = dayKeys[idx];
+                if (typeof label === "string" && key) return `${label}`;
+                return label || "";
+              },
               label: (ctx) => {
-                if (!yIsIndex) return `${ctx.dataset.label}: ${fmtNum(ctx.raw, 2)}%`;
-                if (ctx.dataset.label === "Media stagionale reale (indice base 100)") {
-                  const i = ctx.dataIndex;
-                  const low = lowPath[i];
-                  const high = highPath[i];
-                  const q1 = q1Path[i];
-                  const q3 = q3Path[i];
-                  return `Media ${fmtNum(ctx.raw, 2)} | Min ${fmtNum(low, 2)} | Max ${fmtNum(high, 2)} | Q1 ${fmtNum(q1, 2)} | Q3 ${fmtNum(q3, 2)}`;
+                const i = ctx.dataIndex;
+                const peak = peakByIdx.get(i);
+                const trough = troughByIdx.get(i);
+                if (ctx.dataset.label === "Massimi stagionali" && peak) {
+                  return `Massimo stagionale · indice ${fmtNum(peak.value, 2)} (prominenza ${fmtNum(peak.prominence, 2)})`;
                 }
-                if (ctx.dataset.label === "Min/Max range") return null;
-                if (ctx.dataset.label === "IQR (Q1-Q3)") return null;
-                if (ctx.dataset.label === "Max storico (anni selezionati)" || ctx.dataset.label === "Q3") return null;
+                if (ctx.dataset.label === "Minimi stagionali" && trough) {
+                  return `Minimo stagionale · indice ${fmtNum(trough.value, 2)} (prominenza ${fmtNum(trough.prominence, 2)})`;
+                }
+                if (ctx.dataset.label === "Media stagionale giornaliera") {
+                  return `Media storica: ${fmtNum(ctx.raw, 2)}`;
+                }
+                if (ctx.dataset.label === "Oggi") {
+                  return `Oggi sulla media: ${fmtNum(ctx.raw, 2)}`;
+                }
                 return `${ctx.dataset.label}: ${fmtNum(ctx.raw, 2)}`;
+              },
+              afterBody: (items) => {
+                const i = items?.[0]?.dataIndex;
+                if (!Number.isFinite(i)) return [];
+                const peak = peakByIdx.get(i);
+                const trough = troughByIdx.get(i);
+                if (peak) return ["Storicamente zona di massimo relativo"];
+                if (trough) return ["Storicamente zona di minimo relativo"];
+                return [];
               },
             },
           },
@@ -4022,15 +4136,16 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
             ticks: {
               color: "#9fb8cc",
               autoSkip: true,
-              maxTicksLimit: usePath ? 14 : 12,
+              maxTicksLimit: usePath ? 72 : 12,
+              maxRotation: 0,
+              minRotation: 0,
               callback: (value, idx) => {
                 const label = lineLabels[idx];
                 if (!usePath || typeof label !== "string") return label;
                 const [dayRaw, monthRaw] = label.split(" ");
                 const day = Number(dayRaw);
-                if (day === 1) return `${monthRaw}`;
-                if (day % 5 === 0) return dayRaw;
-                return "";
+                if (day === 1) return monthRaw;
+                return dayRaw;
               },
             },
             grid: {
@@ -4039,7 +4154,7 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
                 const label = lineLabels[ctx.index];
                 if (typeof label !== "string") return "rgba(61,102,139,0.32)";
                 const [dayRaw] = label.split(" ");
-                return Number(dayRaw) === 1 ? "rgba(122,163,201,0.48)" : "rgba(61,102,139,0.22)";
+                return Number(dayRaw) === 1 ? "rgba(122,163,201,0.48)" : "rgba(61,102,139,0.18)";
               },
             },
           },
@@ -4056,6 +4171,8 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
     canvas?.addEventListener("dblclick", () => state.seasonalityChart?.resetZoom?.());
     return;
   }
+
+  if (chartTitleEl) chartTitleEl.textContent = "Stagionalita media mensile";
 
   // Modalita candlestick sintetica (range min/max + body Q1/Q3 + mediana).
   state.seasonalityChart = new Chart(canvas, {
