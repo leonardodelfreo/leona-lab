@@ -1141,12 +1141,17 @@ function serveStatic(req, res, pathname) {
       : ext === ".js" ? "application/javascript; charset=utf-8"
       : ext === ".css" ? "text/css; charset=utf-8"
       : ext === ".json" ? "application/json; charset=utf-8"
+      : ext === ".xml" ? "application/xml; charset=utf-8"
+      : ext === ".txt" ? "text/plain; charset=utf-8"
       : ext === ".svg" ? "image/svg+xml; charset=utf-8"
       : ext === ".png" ? "image/png"
       : ext === ".jpg" || ext === ".jpeg" ? "image/jpeg"
       : ext === ".webp" ? "image/webp"
       : "application/octet-stream";
-    res.writeHead(200, { "Content-Type": mime });
+    const cacheControl =
+      ext === ".html" || ext === ".xml" || ext === ".txt" ? "public, max-age=300"
+      : "public, max-age=86400";
+    res.writeHead(200, { "Content-Type": mime, "Cache-Control": cacheControl });
     res.end(content);
   });
 }
