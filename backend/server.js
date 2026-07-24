@@ -20,6 +20,8 @@ const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
+const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
+const RESEND_FROM = String(process.env.RESEND_FROM || "Leona.Lab <onboarding@resend.dev>").trim();
 const APP_BASE_URL = String(process.env.APP_BASE_URL || "").trim().replace(/\/$/, "");
 const REQUIRE_PAYMENT = Boolean(STRIPE_SECRET_KEY) && String(process.env.ALLOW_FREE_REGISTER || "").toLowerCase() !== "true";
 const ALLOW_SEED_USER = String(process.env.ALLOW_SEED_USER || "").toLowerCase() === "true";
@@ -46,6 +48,7 @@ const ADMIN_EMAILS = new Set(
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
 );
+const PURCHASE_EMAILS_FILE = path.join(DATA_DIR, "purchase-emails.json");
 
 function isAdminEmail(email) {
   const normalized = normalizeEmail(email);
@@ -519,6 +522,21 @@ function writePaidSessions(map) {
   fs.writeFileSync(PAID_SESSIONS_FILE, JSON.stringify(map || {}, null, 2), "utf8");
 }
 
+function readPurchaseEmails() {
+  try {
+    if (!fs.existsSync(PURCHASE_EMAILS_FILE)) return {};
+    const parsed = JSON.parse(fs.readFileSync(PURCHASE_EMAILS_FILE, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePurchaseEmails(map) {
+  ensureDataDir();
+  fs.writeFileSync(PURCHASE_EMAILS_FILE, JSON.stringify(map || {}, null, 2), "utf8");
+}
+
 function getStripe() {
   if (!STRIPE_SECRET_KEY) return null;
   // Lazy require so the server still boots without the package in pure-local no-pay mode.
@@ -532,6 +550,111 @@ function resolveAppBaseUrl(req) {
   const proto = String(req.headers["x-forwarded-proto"] || "http").split(",")[0].trim();
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || `${HOST}:${PORT}`).split(",")[0].trim();
   return `${proto}://${host}`;
+}
+
+function buildRegisterUrl(baseUrl, planId, sessionId) {
+  const base = String(baseUrl || APP_BASE_URL || "https://leona-lab.com").replace(/\/$/, "");
+  const plan = encodeURIComponent(planId || "mensile");
+  const sid = encodeURIComponent(sessionId || "");
+  return `${base}/registrati?plan=${plan}&session_id=${sid}`;
+}
+
+function buildLoginUrl(baseUrl) {
+  const base = String(baseUrl || APP_BASE_URL || "https://leona-lab.com").replace(/\/$/, "");
+  return `${base}/login`;
+}
+
+async function sendResendEmail({ to, subject, html, text }) {
+  if (!RESEND_API_KEY) {
+    return { ok: false, skipped: true, error: "RESEND_API_KEY non configurata" };
+  }
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: RESEND_FROM,
+      to: [to],
+      subject,
+      html,
+      text,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: payload?.message || payload?.error || `Resend HTTP ${response.status}`,
+    };
+  }
+  return { ok: true, id: payload?.id || null };
+}
+
+async function sendPurchaseFollowUpEmail({ email, planId, sessionId, baseUrl }) {
+  const to = normalizeEmail(email);
+  const sid = String(sessionId || "").trim();
+  if (!to || !to.includes("@") || !sid) {
+    return { ok: false, skipped: true, error: "email o session_id mancanti" };
+  }
+
+  const sentMap = readPurchaseEmails();
+  if (sentMap[sid]?.sentAt) {
+    return { ok: true, skipped: true, alreadySent: true };
+  }
+
+  const plan = PLAN_CATALOG[String(planId || "").toLowerCase()] || PLAN_CATALOG.mensile;
+  const registerUrl = buildRegisterUrl(baseUrl, plan.id, sid);
+  const loginUrl = buildLoginUrl(baseUrl);
+  const subject = "Pagamento ricevuto — completa la registrazione su Leona.Lab";
+  const text = [
+    "Grazie per il pagamento su Leona.Lab.",
+    "",
+    `Piano: ${plan.label}`,
+    "",
+    "Completa la registrazione (stessa email del pagamento):",
+    registerUrl,
+    "",
+    "Se hai gia un account:",
+    loginUrl,
+    "",
+    "Se non hai richiesto tu questo pagamento, ignora questa email.",
+  ].join("\n");
+  const html = `
+    <div style="font-family:Segoe UI,Arial,sans-serif;line-height:1.5;color:#111;max-width:560px">
+      <h1 style="font-size:20px;margin:0 0 12px">Pagamento ricevuto</h1>
+      <p style="margin:0 0 12px">Grazie per il pagamento su <strong>Leona.Lab</strong>.</p>
+      <p style="margin:0 0 12px">Piano: <strong>${plan.label}</strong></p>
+      <p style="margin:0 0 16px">Per entrare nel desk completa la registrazione con la <strong>stessa email</strong> usata nel pagamento.</p>
+      <p style="margin:0 0 20px">
+        <a href="${registerUrl}" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px">
+          Completa registrazione
+        </a>
+      </p>
+      <p style="margin:0 0 8px;font-size:14px;color:#444">
+        Hai gia un account? <a href="${loginUrl}">Vai al login</a>
+      </p>
+      <p style="margin:16px 0 0;font-size:12px;color:#777">
+        Se non hai richiesto tu questo pagamento, ignora questa email.
+      </p>
+    </div>
+  `;
+
+  const result = await sendResendEmail({ to, subject, html, text });
+  if (!result.ok) {
+    console.warn("[email] purchase follow-up failed:", result.error || result.skipped);
+    return result;
+  }
+
+  sentMap[sid] = {
+    email: to,
+    plan: plan.id,
+    sentAt: new Date().toISOString(),
+    providerId: result.id || null,
+  };
+  writePurchaseEmails(sentMap);
+  return { ok: true, id: result.id || null };
 }
 
 async function verifyCheckoutSession(sessionId) {
@@ -638,6 +761,24 @@ function readJsonBody(req) {
         reject(new Error("json body non valido"));
       }
     });
+    req.on("error", (error) => reject(error));
+  });
+}
+
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += buf.length;
+      if (size > 2 * 1024 * 1024) {
+        reject(new Error("payload troppo grande"));
+        return;
+      }
+      chunks.push(buf);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", (error) => reject(error));
   });
 }
@@ -1641,6 +1782,8 @@ const server = http.createServer(async (req, res) => {
       billing: {
         stripeConfigured: Boolean(STRIPE_SECRET_KEY),
         requirePayment: REQUIRE_PAYMENT,
+        webhookConfigured: Boolean(STRIPE_WEBHOOK_SECRET),
+        purchaseEmailConfigured: Boolean(RESEND_API_KEY),
       },
       auth: {
         userCount,
@@ -1710,6 +1853,12 @@ const server = http.createServer(async (req, res) => {
         metadata: { plan: plan.id },
         allow_promotion_codes: true,
         billing_address_collection: "auto",
+        custom_text: {
+          submit: {
+            message:
+              "Dopo il pagamento riceverai un'email con il link per creare l'account e entrare nel desk Leona.Lab.",
+          },
+        },
       };
       if (plan.mode === "payment") {
         sessionParams.customer_creation = "always";
@@ -1721,12 +1870,48 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (pathname === "/api/stripe/webhook" && req.method === "POST") {
+    try {
+      const stripe = getStripe();
+      if (!stripe) return json(res, 503, { ok: false, error: "Stripe non configurato" });
+      if (!STRIPE_WEBHOOK_SECRET) {
+        return json(res, 503, { ok: false, error: "STRIPE_WEBHOOK_SECRET non configurato" });
+      }
+      const rawBody = await readRawBody(req);
+      const signature = String(req.headers["stripe-signature"] || "");
+      const event = stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET);
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object;
+        const plan = String(session?.metadata?.plan || "mensile").toLowerCase();
+        const email = normalizeEmail(session?.customer_details?.email || session?.customer_email || "");
+        const sessionId = String(session?.id || "");
+        await sendPurchaseFollowUpEmail({
+          email,
+          planId: plan,
+          sessionId,
+          baseUrl: APP_BASE_URL || resolveAppBaseUrl(req),
+        });
+      }
+      return json(res, 200, { ok: true, received: true });
+    } catch (error) {
+      console.warn("[stripe webhook]", error?.message || error);
+      return json(res, 400, { ok: false, error: error?.message || "webhook non valido" });
+    }
+  }
+
   if (pathname === "/api/checkout/session" && req.method === "GET") {
     try {
       const sessionId = requestUrl.searchParams.get("session_id") || "";
       if (!sessionId) return json(res, 400, { ok: false, error: "session_id mancante" });
       const verified = await verifyCheckoutSession(sessionId);
       const used = readPaidSessions()[sessionId];
+      // Fallback: se il webhook non ha ancora inviato, prova qui (idempotente).
+      await sendPurchaseFollowUpEmail({
+        email: verified.email,
+        planId: verified.plan,
+        sessionId: verified.id,
+        baseUrl: resolveAppBaseUrl(req),
+      });
       return json(res, 200, {
         ok: true,
         paid: true,
@@ -1776,6 +1961,7 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       stripeEnabled: Boolean(STRIPE_SECRET_KEY),
       requirePayment: REQUIRE_PAYMENT,
+      purchaseEmailEnabled: Boolean(RESEND_API_KEY),
       plans: Object.values(PLAN_CATALOG).map((p) => ({
         id: p.id,
         label: p.label,

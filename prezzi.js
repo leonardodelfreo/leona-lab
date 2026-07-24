@@ -51,7 +51,7 @@ async function initPricing() {
         "down"
       );
     } else {
-      setStatus("Pagamento sicuro con Stripe. Dopo il pagamento crei l'account.", "up");
+      setStatus("Pagamento sicuro con Stripe. Dopo il pagamento ricevi l'email e crei l'account.", "up");
     }
   } catch {
     // ignore config errors
