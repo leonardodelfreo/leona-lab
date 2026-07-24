@@ -83,7 +83,12 @@ async function doLogin() {
     setStatus("Login riuscito. Apertura dashboard...", "up");
     window.location.href = "/app";
   } catch (error) {
-    setStatus(`Login fallito: ${error.message}`, "down");
+    const msg = String(error.message || "");
+    if (/credenziali|non valide|401/i.test(msg)) {
+      setStatus("Credenziali non valide. Se sei admin e non hai ancora un account: vai su Registrati (senza pagare).", "down");
+    } else {
+      setStatus(`Login fallito: ${error.message}`, "down");
+    }
   }
 }
 

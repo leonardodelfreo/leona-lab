@@ -1488,12 +1488,23 @@ const server = http.createServer(async (req, res) => {
     const assetId = requestUrl.searchParams.get("asset") || "XAUUSD";
     const priceCache = readJsonCache(getPriceCacheFile(String(assetId).toUpperCase()), PRICE_CACHE_MAX_AGE_MS);
     const cotCache = readJsonCache(getCotCacheFile(String(assetId).toUpperCase()), COT_CACHE_MAX_AGE_MS);
+    let userCount = 0;
+    try {
+      userCount = readUsers().length;
+    } catch {
+      userCount = -1;
+    }
     return json(res, 200, {
       ok: true,
       assetId: String(assetId).toUpperCase(),
       billing: {
         stripeConfigured: Boolean(STRIPE_SECRET_KEY),
         requirePayment: REQUIRE_PAYMENT,
+      },
+      auth: {
+        userCount,
+        adminEmailsConfigured: ADMIN_EMAILS.size,
+        sessionsActive: sessions.size,
       },
       dataDir: DATA_DIR,
       macro: {
