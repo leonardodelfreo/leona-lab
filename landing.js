@@ -25,7 +25,7 @@ async function showDashboardShortcutIfLoggedIn() {
     if (!tip) {
       tip = document.createElement("p");
       tip.className = "muted logged-in-tip";
-      tip.innerHTML = 'Sei gia autenticato. <a href="/app">Apri la dashboard</a>';
+      tip.innerHTML = 'Sessione attiva. <a href="/app">Apri la dashboard</a>';
       accessSection.appendChild(tip);
     }
   } catch {
