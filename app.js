@@ -264,6 +264,67 @@ const PREFS_KEY = "xau_dashboard_prefs_v1";
 const APP_USER_ID_KEY = "leona_lab_user_id";
 const DEFAULT_APP_USER_ID = "leona-default";
 const AUTH_TOKEN_KEY = "leona_lab_auth_token";
+const CHART_JS_URL = "https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js";
+const CHART_ZOOM_URL = "https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js";
+let chartsLoadPromise = null;
+
+function loadExternalScript(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[data-src="${src}"]`);
+    if (existing) {
+      if (existing.dataset.loaded === "1") {
+        resolve();
+        return;
+      }
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Script load failed: ${src}`)), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.dataset.src = src;
+    script.onload = () => {
+      script.dataset.loaded = "1";
+      resolve();
+    };
+    script.onerror = () => reject(new Error(`Script load failed: ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureChartsLoaded() {
+  if (typeof Chart !== "undefined") {
+    state.chartingAvailable = true;
+    if (window.ChartZoom) {
+      try {
+        Chart.register(window.ChartZoom);
+      } catch {
+        // already registered
+      }
+    }
+    return true;
+  }
+  if (!chartsLoadPromise) {
+    chartsLoadPromise = (async () => {
+      await loadExternalScript(CHART_JS_URL);
+      await loadExternalScript(CHART_ZOOM_URL);
+      state.chartingAvailable = typeof Chart !== "undefined";
+      if (state.chartingAvailable && window.ChartZoom) {
+        try {
+          Chart.register(window.ChartZoom);
+        } catch {
+          // already registered
+        }
+      }
+      return state.chartingAvailable;
+    })().catch(() => {
+      state.chartingAvailable = false;
+      return false;
+    });
+  }
+  return chartsLoadPromise;
+}
 
 function getAssetScopedCacheKey(baseKey) {
   return `${baseKey}_${state.selectedAssetId || "XAUUSD"}`;
@@ -4487,11 +4548,15 @@ function renderDashboard() {
     if (seasonalityRankRowsEl) seasonalityRankRowsEl.innerHTML = "";
     clearBacktest();
     renderAlertFeed();
-    renderSignalHistory();
     renderSourceHealth();
-    renderReplaySnapshot();
-    renderSignalJournal();
-    renderMacroCalendar();
+    if (state.activePage === "signals") {
+      renderSignalHistory();
+      renderReplaySnapshot();
+      renderSignalJournal();
+    }
+    if (state.activePage === "macro") {
+      renderMacroCalendar();
+    }
     statusEl.textContent = "In attesa di dati live reali...";
     return;
   }
@@ -4530,16 +4595,26 @@ function renderDashboard() {
 
     try {
       const payload = buildSeasonalityPayloadFromPrices(state.priceData.prices, state.seasonalityYears);
-      renderSeasonalitySection(payload, state.priceData?.source || "");
+      state.latestSeasonalityPayload = payload;
+      // Chart/DOM pesanti solo sulla tab Stagionalita.
+      if (state.activePage === "seasonality") {
+        renderSeasonalitySection(payload, state.priceData?.source || "");
+      }
     } catch {
-      clearSeasonalitySection("Stagionalita non calcolabile: attendi prezzi storici reali");
+      state.latestSeasonalityPayload = null;
+      if (state.activePage === "seasonality") {
+        clearSeasonalitySection("Stagionalita non calcolabile: attendi prezzi storici reali");
+      }
     }
   } else {
     setText("spotPrice", "--");
     setText("spotChange", "--");
     setText("vol30", "--");
     setText("range52", "--");
-    clearSeasonalitySection("In attesa di prezzi reali per calcolare stagionalita e timing giorni");
+    state.latestSeasonalityPayload = null;
+    if (state.activePage === "seasonality") {
+      clearSeasonalitySection("In attesa di prezzi reali per calcolare stagionalita e timing giorni");
+    }
   }
 
   if (enoughPrice) {
@@ -4822,8 +4897,10 @@ function renderDashboard() {
       executionSide: execution.side,
     });
 
-    updateFocusedCotChart(filteredCot);
-    renderWeeklyFlowsTable(filteredCot);
+    if (state.activePage === "cot") {
+      updateFocusedCotChart(filteredCot);
+      renderWeeklyFlowsTable(filteredCot);
+    }
   } else {
     setText("cotNonCommNet", "--");
     setText("cotNonCommPct", "Net: --");
@@ -4900,11 +4977,16 @@ function renderDashboard() {
     : `Tutto aggiornato · Asset ${selectedAsset.id} · refresh ${state.refreshSeconds}s · TF ${state.timeframe} · Prezzi: ${priceSource}${symbolSuffix} · COT: ${cotSource}`;
   updateFeedStatusBadge();
   renderAlertFeed();
-  renderSignalHistory();
-  renderSignalJournal();
   renderSourceHealth();
-  renderReplaySnapshot();
-  renderMacroCalendar();
+  // DOM pesanti per tab: solo se la pagina e attiva.
+  if (state.activePage === "signals") {
+    renderSignalHistory();
+    renderSignalJournal();
+    renderReplaySnapshot();
+  }
+  if (state.activePage === "macro") {
+    renderMacroCalendar();
+  }
 }
 
 function scheduleRender() {
@@ -5100,14 +5182,24 @@ function setActivePage(page) {
   tabSeasonalityEl?.classList.toggle("active", isSeasonality);
   tabSignalsEl?.classList.toggle("active", isSignals);
   tabMacroEl?.classList.toggle("active", isMacro);
+
+  // Render on-demand della sezione appena aperta (evita lavoro a ogni refresh).
+  if (isSeasonality && state.latestSeasonalityPayload) {
+    renderSeasonalitySection(state.latestSeasonalityPayload, state.priceData?.source || "");
+  } else if (isSignals) {
+    renderSignalHistory();
+    renderSignalJournal();
+    renderReplaySnapshot();
+  } else if (isMacro) {
+    renderMacroCalendar();
+  }
+
   setTimeout(() => {
     if (isCot) {
       applyCotPanelHeight();
       state.cotFocusedChart?.resize();
     } else if (isSeasonality) {
       state.seasonalityChart?.resize();
-    } else if (isMacro) {
-      renderMacroCalendar();
     }
   }, 40);
   scheduleRender();
@@ -5553,16 +5645,9 @@ async function init() {
   applySelectedAsset(state.selectedAssetId, { syncInput: false });
   populateAssetList();
 
-  state.chartingAvailable = typeof Chart !== "undefined";
-  if (state.chartingAvailable && window.ChartZoom) {
-    try {
-      Chart.register(window.ChartZoom);
-    } catch {
-      // plugin gia registrato
-    }
-  }
+  await ensureChartsLoaded();
   if (!state.chartingAvailable) {
-    statusEl.textContent = "Chart.js non disponibile: modalità tabellare attiva, dati in aggiornamento.";
+    statusEl.textContent = "Chart.js non disponibile: modalita tabellare attiva, dati in aggiornamento.";
     if (seasonalityModeEl) {
       seasonalityModeEl.value = "numbers";
       state.seasonalityMode = "numbers";
