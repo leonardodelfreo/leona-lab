@@ -49,6 +49,11 @@ async function redirectIfAlreadyLoggedIn() {
       headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
     });
     if (response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      if (payload.accessAllowed === false || payload.user?.accessAllowed === false) {
+        window.location.href = "/prezzi";
+        return;
+      }
       window.location.href = "/app";
     }
   } catch {
@@ -70,6 +75,11 @@ async function doLogin() {
       body: { email, password },
     });
     saveAuthToken(payload.token);
+    if (payload.accessAllowed === false || payload.user?.accessAllowed === false) {
+      setStatus("Account senza abbonamento attivo. Reindirizzo ai piani...", "down");
+      window.location.href = "/prezzi";
+      return;
+    }
     setStatus("Login riuscito. Apertura dashboard...", "up");
     window.location.href = "/app";
   } catch (error) {

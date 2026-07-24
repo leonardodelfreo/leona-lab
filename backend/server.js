@@ -249,7 +249,104 @@ function ensureAdminPrivileges(user) {
     user.plan = "lifetime";
     changed = true;
   }
+  if (!user.paidAt) {
+    user.paidAt = new Date().toISOString();
+    changed = true;
+  }
   return changed;
+}
+
+function evaluateUserAccess(user) {
+  if (!user) {
+    return { accessAllowed: false, reason: "utente non trovato", plan: null, role: null };
+  }
+  const role = String(user.role || (isAdminEmail(user.email) ? "admin" : "user"));
+  const plan = String(user.plan || "").toLowerCase() || null;
+
+  if (role === "admin" || isAdminEmail(user.email)) {
+    return {
+      accessAllowed: true,
+      reason: "admin",
+      plan: plan || "lifetime",
+      role: "admin",
+    };
+  }
+
+  if (!REQUIRE_PAYMENT) {
+    return {
+      accessAllowed: true,
+      reason: "pagamento non richiesto",
+      plan: plan || "mensile",
+      role,
+    };
+  }
+
+  if (!plan || !PLAN_CATALOG[plan]) {
+    return { accessAllowed: false, reason: "piano non valido", plan, role };
+  }
+
+  // Accesso desk: serve evidenza di pagamento (paidAt / Stripe ids).
+  const hasPaymentProof = Boolean(user.paidAt || user.stripeCustomerId || user.stripeSessionId);
+  if (hasPaymentProof) {
+    return {
+      accessAllowed: true,
+      reason: "abbonamento attivo",
+      plan,
+      role,
+    };
+  }
+
+  return {
+    accessAllowed: false,
+    reason: "pagamento richiesto per accedere al desk",
+    plan,
+    role,
+  };
+}
+
+function getUserFromSession(session) {
+  if (!session?.userId) return null;
+  const users = readUsers();
+  const user = users.find((u) => u.username === session.userId) || null;
+  if (user && ensureAdminPrivileges(user)) {
+    writeUsers(users);
+  }
+  return user;
+}
+
+/** Richiede login + accesso desk. Scrive la risposta di errore e ritorna null. */
+function requireAppAccess(req, res) {
+  const session = getSessionFromRequest(req);
+  if (!session) {
+    json(res, 401, { ok: false, error: "login richiesto", accessAllowed: false });
+    return null;
+  }
+  const user = getUserFromSession(session);
+  const access = evaluateUserAccess(user);
+  if (!access.accessAllowed) {
+    json(res, 403, {
+      ok: false,
+      error: access.reason || "accesso non autorizzato",
+      accessAllowed: false,
+      plan: access.plan,
+      role: access.role,
+    });
+    return null;
+  }
+  return { session, user, access };
+}
+
+function publicUserPayload(user, access = null) {
+  const evaluated = access || evaluateUserAccess(user);
+  return {
+    id: user?.username || null,
+    email: user?.email || null,
+    name: user?.displayName || user?.username || null,
+    plan: evaluated.plan,
+    role: evaluated.role,
+    accessAllowed: evaluated.accessAllowed,
+    accessReason: evaluated.reason,
+  };
 }
 
 function readPaidSessions() {
@@ -1390,6 +1487,7 @@ const server = http.createServer(async (req, res) => {
       if (ensureAdminPrivileges(found)) {
         writeUsers(users);
       }
+      const access = evaluateUserAccess(found);
       const token = crypto.randomBytes(24).toString("hex");
       const expiresAt = Date.now() + SESSION_TTL_MS;
       sessions.set(token, {
@@ -1401,13 +1499,8 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         token,
         expiresAt: new Date(expiresAt).toISOString(),
-        user: {
-          id: found.username,
-          email: found.email || null,
-          name: found.displayName || found.username,
-          plan: found.plan || null,
-          role: found.role || "user",
-        },
+        accessAllowed: access.accessAllowed,
+        user: publicUserPayload(found, access),
       });
     } catch (error) {
       return json(res, 400, { ok: false, error: error?.message || "login fallito" });
@@ -1506,17 +1599,23 @@ const server = http.createServer(async (req, res) => {
         displayName: displayName || username,
         expiresAt,
       });
+      const createdUser = {
+        username,
+        email,
+        displayName: displayName || username,
+        plan: normalizedPlan,
+        role,
+        paidAt,
+        stripeSessionId,
+        stripeCustomerId,
+      };
+      const access = evaluateUserAccess(createdUser);
       return json(res, 201, {
         ok: true,
         token,
         expiresAt: new Date(expiresAt).toISOString(),
-        user: {
-          id: username,
-          email,
-          name: displayName || username,
-          plan: normalizedPlan,
-          role,
-        },
+        accessAllowed: access.accessAllowed,
+        user: publicUserPayload(createdUser, access),
       });
     } catch (error) {
       return json(res, 400, { ok: false, error: error?.message || "registrazione fallita" });
@@ -1526,14 +1625,14 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/auth/me" && req.method === "GET") {
     const session = getSessionFromRequest(req);
     if (!session) {
-      return json(res, 401, { ok: false, error: "sessione non valida" });
+      return json(res, 401, { ok: false, error: "sessione non valida", accessAllowed: false });
     }
+    const user = getUserFromSession(session);
+    const access = evaluateUserAccess(user);
     return json(res, 200, {
       ok: true,
-      user: {
-        id: session.userId,
-        name: session.displayName || session.userId,
-      },
+      accessAllowed: access.accessAllowed,
+      user: publicUserPayload(user || { username: session.userId, displayName: session.displayName }, access),
       expiresAt: new Date(session.expiresAt).toISOString(),
     });
   }
@@ -1582,6 +1681,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === "/api/price/series") {
+    if (!requireAppAccess(req, res)) return;
     const assetId = requestUrl.searchParams.get("asset") || "XAUUSD";
     const result = await getPriceSeriesForAsset(assetId);
     return json(res, 200, {
@@ -1598,6 +1698,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === "/api/cot/report") {
+    if (!requireAppAccess(req, res)) return;
     const assetId = requestUrl.searchParams.get("asset") || "XAUUSD";
     const result = await getCotRowsForAsset(assetId);
     return json(res, 200, {
@@ -1613,6 +1714,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === "/api/bootstrap") {
+    if (!requireAppAccess(req, res)) return;
     const assetId = requestUrl.searchParams.get("asset") || "XAUUSD";
     if (requestUrl.searchParams.get("forceMacro") === "1") {
       await refreshMacroData();
@@ -1660,6 +1762,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === "/api/macro/events") {
+    if (!requireAppAccess(req, res)) return;
     if (requestUrl.searchParams.get("force") === "1") {
       await refreshMacroData();
     }

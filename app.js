@@ -412,7 +412,16 @@ async function fetchJsonWithAuth(url, { method = "GET", body = undefined, withAu
     // keep null
   }
   if (!response.ok) {
-    throw new Error(payload?.error || `HTTP ${response.status}`);
+    const err = new Error(payload?.error || `HTTP ${response.status}`);
+    err.status = response.status;
+    err.payload = payload;
+    if (response.status === 401) {
+      clearAuthState();
+      window.location.href = "/login";
+    } else if (response.status === 403) {
+      window.location.href = "/prezzi";
+    }
+    throw err;
   }
   return payload;
 }
@@ -436,7 +445,7 @@ async function hydrateAuthFromStorage() {
   const token = getStoredAuthToken();
   if (!token) {
     clearAuthState();
-    return false;
+    return { ok: false, reason: "no_token" };
   }
   state.auth.token = token;
   try {
@@ -445,10 +454,13 @@ async function hydrateAuthFromStorage() {
     state.auth.user = payload?.user || null;
     state.auth.expiresAt = payload?.expiresAt || null;
     applyAuthUi();
-    return true;
+    if (payload?.accessAllowed === false || payload?.user?.accessAllowed === false) {
+      return { ok: false, reason: "no_access", user: payload?.user || null };
+    }
+    return { ok: true, user: payload?.user || null };
   } catch {
     clearAuthState();
-    return false;
+    return { ok: false, reason: "invalid_session" };
   }
 }
 
@@ -885,7 +897,7 @@ function getMacroBackendBaseUrl() {
 async function fetchMacroCalendarFromBackend() {
   const base = getMacroBackendBaseUrl();
   const url = `${base}/api/macro/events?t=${Date.now()}`;
-  const payload = await fetchJson(url);
+  const payload = await fetchJsonWithAuth(url);
   if (!payload || !Array.isArray(payload.rows) || !payload.rows.length) {
     throw new Error(payload?.source || "backend macro vuoto");
   }
@@ -921,7 +933,7 @@ async function fetchMacroCalendarFromBackend() {
 async function fetchBootstrapFromBackend(asset) {
   const base = getMacroBackendBaseUrl();
   const url = `${base}/api/bootstrap?asset=${encodeURIComponent(asset?.id || "XAUUSD")}&t=${Date.now()}`;
-  const payload = await fetchJson(url);
+  const payload = await fetchJsonWithAuth(url);
   if (!payload || payload.ok === false) {
     throw new Error("bootstrap backend non disponibile");
   }
@@ -1030,7 +1042,7 @@ async function fetchBootstrapFromBackend(asset) {
 async function fetchPriceSeriesFromBackend(asset) {
   const base = getMacroBackendBaseUrl();
   const url = `${base}/api/price/series?asset=${encodeURIComponent(asset?.id || "XAUUSD")}&t=${Date.now()}`;
-  const payload = await fetchJson(url);
+  const payload = await fetchJsonWithAuth(url);
   if (!payload || !Array.isArray(payload.prices) || !payload.prices.length) {
     throw new Error(payload?.source || "backend prezzi vuoto");
   }
@@ -1062,7 +1074,7 @@ async function fetchPriceSeriesFromBackend(asset) {
 async function fetchCotForAssetFromBackend(asset) {
   const base = getMacroBackendBaseUrl();
   const url = `${base}/api/cot/report?asset=${encodeURIComponent(asset?.id || "XAUUSD")}&t=${Date.now()}`;
-  const payload = await fetchJson(url);
+  const payload = await fetchJsonWithAuth(url);
   if (!payload || !Array.isArray(payload.rows) || !payload.rows.length) {
     throw new Error(payload?.source || "backend COT vuoto");
   }
@@ -1117,7 +1129,8 @@ async function fetchCotForAssetFromBackend(asset) {
 async function fetchMacroCalendar() {
   try {
     return await fetchMacroCalendarFromBackend();
-  } catch {
+  } catch (error) {
+    if (error?.status === 401 || error?.status === 403) throw error;
     // fallback client-side
   }
   const sources = [
@@ -1766,7 +1779,8 @@ function getFilteredCot(cotData, timeframe) {
 async function getPriceSeries(asset) {
   try {
     return await fetchPriceSeriesFromBackend(asset);
-  } catch {
+  } catch (error) {
+    if (error?.status === 401 || error?.status === 403) throw error;
     // fallback client-side if backend is offline
   }
   const historicalCandidates = [];
@@ -1857,7 +1871,8 @@ async function getPriceSeries(asset) {
 async function getCotForAsset(asset) {
   try {
     return await fetchCotForAssetFromBackend(asset);
-  } catch {
+  } catch (error) {
+    if (error?.status === 401 || error?.status === 403) throw error;
     // fallback client-side if backend is offline
   }
   if (!asset?.cotMarket) {
@@ -3399,12 +3414,14 @@ function timedTask(taskFn) {
       value,
       latencyMs: Math.round(performance.now() - started),
       error: null,
+      status: null,
     }))
     .catch((error) => ({
       ok: false,
       value: null,
       latencyMs: Math.round(performance.now() - started),
       error: String(error?.message || error || "errore sconosciuto"),
+      status: error?.status || null,
     }));
 }
 
@@ -4909,6 +4926,9 @@ async function loadDataAndRender(options = {}) {
     let cotTask;
     try {
       const bootstrapTask = await timedTask(() => fetchBootstrapFromBackend(selectedAsset));
+      if (bootstrapTask.status === 401 || bootstrapTask.status === 403) {
+        return;
+      }
       if (bootstrapTask.ok) {
         const bootstrap = bootstrapTask.value;
         priceTask = bootstrap.priceData
@@ -4942,7 +4962,8 @@ async function loadDataAndRender(options = {}) {
       } else {
         throw new Error(bootstrapTask.error || "bootstrap backend non disponibile");
       }
-    } catch {
+    } catch (error) {
+      if (error?.status === 401 || error?.status === 403) throw error;
       [priceTask, cotTask] = await Promise.all([
         timedTask(() => getPriceSeries(selectedAsset)),
         timedTask(() => getCotForAsset(selectedAsset)),
@@ -5450,9 +5471,13 @@ function wireEvents() {
 }
 
 async function init() {
-  const hasValidSession = await hydrateAuthFromStorage();
-  if (!hasValidSession) {
-    window.location.href = "/";
+  const authState = await hydrateAuthFromStorage();
+  if (!authState?.ok) {
+    if (authState?.reason === "no_access") {
+      window.location.href = "/prezzi";
+      return;
+    }
+    window.location.href = "/login";
     return;
   }
   const backendPrefs = await loadPrefsFromBackend();
