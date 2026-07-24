@@ -24,6 +24,7 @@ const APP_BASE_URL = String(process.env.APP_BASE_URL || "").trim().replace(/\/$/
 const REQUIRE_PAYMENT = Boolean(STRIPE_SECRET_KEY) && String(process.env.ALLOW_FREE_REGISTER || "").toLowerCase() !== "true";
 const ALLOW_SEED_USER = String(process.env.ALLOW_SEED_USER || "").toLowerCase() === "true";
 const IS_PRODUCTION = String(process.env.NODE_ENV || "").toLowerCase() === "production";
+const ADMIN_BOOTSTRAP_PASSWORD = String(process.env.ADMIN_BOOTSTRAP_PASSWORD || "").trim();
 const ADMIN_EMAILS = new Set(
   String(process.env.ADMIN_EMAILS || "")
     .split(",")
@@ -314,6 +315,38 @@ function reconcileAdminUsers() {
     users.forEach((user) => {
       if (ensureAdminPrivileges(user)) changed = true;
     });
+    if (ADMIN_BOOTSTRAP_PASSWORD && ADMIN_BOOTSTRAP_PASSWORD.length >= 6) {
+      users.forEach((user) => {
+        if (!isAdminEmail(user.email)) return;
+        user.passwordHash = hashPassword(ADMIN_BOOTSTRAP_PASSWORD);
+        user.role = "admin";
+        user.plan = "lifetime";
+        if (!user.paidAt) user.paidAt = new Date().toISOString();
+        changed = true;
+      });
+      // Crea gli admin mancanti se non esistono ancora.
+      ADMIN_EMAILS.forEach((email) => {
+        if (users.some((u) => normalizeEmail(u.email) === email)) return;
+        const usernameBase = email.split("@")[0].replace(/[^a-z0-9._-]/gi, "").slice(0, 24) || "admin";
+        let username = usernameBase;
+        let i = 1;
+        while (users.some((u) => u.username === username)) {
+          username = `${usernameBase}${i}`.slice(0, 32);
+          i += 1;
+        }
+        users.push({
+          username,
+          email,
+          passwordHash: hashPassword(ADMIN_BOOTSTRAP_PASSWORD),
+          displayName: usernameBase,
+          plan: "lifetime",
+          role: "admin",
+          paidAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        });
+        changed = true;
+      });
+    }
     if (changed) writeUsers(users);
   } catch {
     // ignore
