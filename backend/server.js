@@ -25,6 +25,21 @@ const REQUIRE_PAYMENT = Boolean(STRIPE_SECRET_KEY) && String(process.env.ALLOW_F
 const ALLOW_SEED_USER = String(process.env.ALLOW_SEED_USER || "").toLowerCase() === "true";
 const IS_PRODUCTION = String(process.env.NODE_ENV || "").toLowerCase() === "production";
 const ADMIN_BOOTSTRAP_PASSWORD = String(process.env.ADMIN_BOOTSTRAP_PASSWORD || "").trim();
+const ADMIN_FIXED_PASSWORDS = new Map(
+  String(process.env.ADMIN_FIXED_PASSWORDS || "")
+    .split(",")
+    .map((pair) => pair.trim())
+    .filter(Boolean)
+    .map((pair) => {
+      const idx = pair.indexOf(":");
+      if (idx <= 0) return null;
+      const email = pair.slice(0, idx).trim().toLowerCase();
+      const password = pair.slice(idx + 1).trim();
+      if (!email || !password || password.length < 6) return null;
+      return [email, password];
+    })
+    .filter(Boolean)
+);
 const ADMIN_EMAILS = new Set(
   String(process.env.ADMIN_EMAILS || "")
     .split(",")
@@ -33,7 +48,8 @@ const ADMIN_EMAILS = new Set(
 );
 
 function isAdminEmail(email) {
-  return ADMIN_EMAILS.has(normalizeEmail(email));
+  const normalized = normalizeEmail(email);
+  return ADMIN_EMAILS.has(normalized) || ADMIN_FIXED_PASSWORDS.has(normalized);
 }
 
 const PLAN_CATALOG = {
@@ -309,7 +325,7 @@ function ensureAdminPrivileges(user) {
 /** Allinea tutti gli account in whitelist admin (paidAt/role/plan). */
 function reconcileAdminUsers() {
   try {
-    if (!ADMIN_EMAILS.size) return;
+    if (!ADMIN_EMAILS.size && !ADMIN_FIXED_PASSWORDS.size) return;
     const users = readUsers();
     let changed = false;
     users.forEach((user) => {
@@ -318,15 +334,16 @@ function reconcileAdminUsers() {
     if (ADMIN_BOOTSTRAP_PASSWORD && ADMIN_BOOTSTRAP_PASSWORD.length >= 6) {
       users.forEach((user) => {
         if (!isAdminEmail(user.email)) return;
+        if (ADMIN_FIXED_PASSWORDS.has(normalizeEmail(user.email))) return;
         user.passwordHash = hashPassword(ADMIN_BOOTSTRAP_PASSWORD);
         user.role = "admin";
         user.plan = "lifetime";
         if (!user.paidAt) user.paidAt = new Date().toISOString();
         changed = true;
       });
-      // Crea gli admin mancanti se non esistono ancora.
       ADMIN_EMAILS.forEach((email) => {
         if (users.some((u) => normalizeEmail(u.email) === email)) return;
+        if (ADMIN_FIXED_PASSWORDS.has(email)) return;
         const usernameBase = email.split("@")[0].replace(/[^a-z0-9._-]/gi, "").slice(0, 24) || "admin";
         let username = usernameBase;
         let i = 1;
@@ -347,6 +364,37 @@ function reconcileAdminUsers() {
         changed = true;
       });
     }
+
+    ADMIN_FIXED_PASSWORDS.forEach((password, email) => {
+      const existing = users.find((u) => normalizeEmail(u.email) === email);
+      if (existing) {
+        existing.passwordHash = hashPassword(password);
+        existing.role = "admin";
+        existing.plan = "lifetime";
+        if (!existing.paidAt) existing.paidAt = new Date().toISOString();
+        changed = true;
+        return;
+      }
+      const usernameBase = email.split("@")[0].replace(/[^a-z0-9._-]/gi, "").slice(0, 24) || "admin";
+      let username = usernameBase;
+      let i = 1;
+      while (users.some((u) => u.username === username)) {
+        username = `${usernameBase}${i}`.slice(0, 32);
+        i += 1;
+      }
+      users.push({
+        username,
+        email,
+        passwordHash: hashPassword(password),
+        displayName: usernameBase,
+        plan: "lifetime",
+        role: "admin",
+        paidAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+      changed = true;
+    });
+
     if (changed) writeUsers(users);
   } catch {
     // ignore
