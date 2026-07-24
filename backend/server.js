@@ -138,6 +138,7 @@ const macroState = {
 const sessions = new Map();
 let sessionsDirty = false;
 let sessionsSaveTimer = null;
+let sessionsBootstrapped = false;
 
 const rateLimitBuckets = new Map();
 
@@ -172,7 +173,16 @@ function ensureDataDir() {
   } else {
     migrateUsersEmailField();
   }
-  loadSessionsFromDisk();
+}
+
+function bootstrapAuthStore() {
+  ensureDataDir();
+  // Carica sessioni UNA sola volta all'avvio. Ricaricarle ad ogni ensureDataDir
+  // cancellava i login appena creati (Map clear + file disco ancora vecchio).
+  if (!sessionsBootstrapped) {
+    loadSessionsFromDisk();
+    sessionsBootstrapped = true;
+  }
   reconcileAdminUsers();
 }
 
@@ -691,13 +701,14 @@ function scheduleSessionsSave() {
 
 function setSession(token, session) {
   sessions.set(token, session);
-  scheduleSessionsSave();
+  // Persist subito: evita che un restart/reload perda il token prima del debounce.
+  persistSessionsNow();
 }
 
 function deleteSession(token) {
   if (!token) return;
   sessions.delete(token);
-  scheduleSessionsSave();
+  persistSessionsNow();
 }
 
 function cleanupExpiredSessions() {
@@ -2061,7 +2072,7 @@ const server = http.createServer(async (req, res) => {
   return serveStatic(req, res, pathname);
 });
 
-ensureDataDir();
+bootstrapAuthStore();
 startMacroScheduler();
 server.listen(PORT, HOST, () => {
   console.log(`[server] running on http://${HOST}:${PORT}`);
