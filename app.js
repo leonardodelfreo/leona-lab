@@ -460,7 +460,7 @@ function clearAuthState() {
   applyAuthUi();
 }
 
-async function fetchJsonWithAuth(url, { method = "GET", body = undefined, withAuth = true, redirectOnAuthError = true } = {}) {
+async function fetchJsonWithAuth(url, { method = "GET", body = undefined, withAuth = true, redirectOnAuthError = false } = {}) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (withAuth && state.auth?.token) {
@@ -481,6 +481,7 @@ async function fetchJsonWithAuth(url, { method = "GET", body = undefined, withAu
     const err = new Error(payload?.error || `HTTP ${response.status}`);
     err.status = response.status;
     err.payload = payload;
+    // Non buttare fuori automaticamente su 401 di API dati: solo hydrate/init decide il redirect.
     if (redirectOnAuthError) {
       if (response.status === 401) {
         clearAuthState();

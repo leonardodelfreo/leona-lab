@@ -649,30 +649,68 @@ function parseBearerToken(req) {
   return match[1].trim();
 }
 
-function loadSessionsFromDisk() {
+function normalizeSessionRecord(session) {
+  if (!session?.userId || !session?.expiresAt) return null;
+  const expiresAt = Number(session.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+  return {
+    userId: String(session.userId),
+    displayName: String(session.displayName || session.userId),
+    expiresAt,
+  };
+}
+
+function readSessionsFile() {
   try {
-    if (!fs.existsSync(SESSIONS_FILE)) return;
+    if (!fs.existsSync(SESSIONS_FILE)) return {};
     const parsed = JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf8"));
-    const entries = parsed?.sessions && typeof parsed.sessions === "object" ? parsed.sessions : {};
+    return parsed?.sessions && typeof parsed.sessions === "object" ? parsed.sessions : {};
+  } catch {
+    return {};
+  }
+}
+
+function loadSessionsFromDisk({ clear = true } = {}) {
+  try {
+    const entries = readSessionsFile();
     const now = Date.now();
-    sessions.clear();
+    if (clear) sessions.clear();
     Object.entries(entries).forEach(([token, session]) => {
-      if (!token || !session?.userId || !session?.expiresAt) return;
-      if (Number(session.expiresAt) <= now) return;
-      sessions.set(token, {
-        userId: String(session.userId),
-        displayName: String(session.displayName || session.userId),
-        expiresAt: Number(session.expiresAt),
-      });
+      if (!token) return;
+      const normalized = normalizeSessionRecord(session);
+      if (!normalized || normalized.expiresAt <= now) return;
+      // In merge mode non sovrascrivere sessioni in memoria piu fresche.
+      if (!clear && sessions.has(token)) {
+        const current = sessions.get(token);
+        if (Number(current?.expiresAt || 0) >= normalized.expiresAt) return;
+      }
+      sessions.set(token, normalized);
     });
   } catch {
     // ignore corrupt session file
   }
 }
 
-function persistSessionsNow() {
+function lookupSessionFromDisk(token) {
+  if (!token) return null;
+  try {
+    const entries = readSessionsFile();
+    return normalizeSessionRecord(entries[token]);
+  } catch {
+    return null;
+  }
+}
+
+function persistSessionsNow(options = {}) {
+  const removeTokens = Array.isArray(options.removeTokens) ? options.removeTokens : [];
   try {
     ensureDataDir();
+    // Merge disco -> memoria prima di scrivere, cosi un'istanza non cancella
+    // le sessioni create da un'altra (o da un restart precedente).
+    loadSessionsFromDisk({ clear: false });
+    for (const token of removeTokens) {
+      sessions.delete(token);
+    }
     const payload = { sessions: {} };
     const now = Date.now();
     for (const [token, session] of sessions.entries()) {
@@ -708,7 +746,8 @@ function setSession(token, session) {
 function deleteSession(token) {
   if (!token) return;
   sessions.delete(token);
-  persistSessionsNow();
+  // removeTokens evita che il merge da disco riaggiunga la sessione appena cancellata.
+  persistSessionsNow({ removeTokens: [token] });
 }
 
 function cleanupExpiredSessions() {
@@ -727,8 +766,18 @@ function getSessionFromRequest(req) {
   cleanupExpiredSessions();
   const token = parseBearerToken(req);
   if (!token) return null;
-  const session = sessions.get(token);
+  let session = sessions.get(token);
+  if (!session) {
+    // Fallback disco: utile dopo restart o se un'altra istanza ha creato la sessione.
+    session = lookupSessionFromDisk(token);
+    if (session) sessions.set(token, session);
+  }
   if (!session) return null;
+  if (Number(session.expiresAt) <= Date.now()) {
+    sessions.delete(token);
+    scheduleSessionsSave();
+    return null;
+  }
   return { token, ...session };
 }
 
@@ -1596,7 +1645,10 @@ const server = http.createServer(async (req, res) => {
       auth: {
         userCount,
         adminEmailsConfigured: ADMIN_EMAILS.size,
-        sessionsActive: sessions.size,
+        sessionsActive: (() => {
+          loadSessionsFromDisk({ clear: false });
+          return sessions.size;
+        })(),
       },
       dataDir: DATA_DIR,
       macro: {
