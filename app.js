@@ -307,8 +307,13 @@ async function ensureChartsLoaded() {
   }
   if (!chartsLoadPromise) {
     chartsLoadPromise = (async () => {
-      await loadExternalScript(CHART_JS_URL);
-      await loadExternalScript(CHART_ZOOM_URL);
+      const withTimeout = (promise, ms) =>
+        Promise.race([
+          promise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout chart load")), ms)),
+        ]);
+      await withTimeout(loadExternalScript(CHART_JS_URL), 8000);
+      await withTimeout(loadExternalScript(CHART_ZOOM_URL), 8000);
       state.chartingAvailable = typeof Chart !== "undefined";
       if (state.chartingAvailable && window.ChartZoom) {
         try {
@@ -455,7 +460,7 @@ function clearAuthState() {
   applyAuthUi();
 }
 
-async function fetchJsonWithAuth(url, { method = "GET", body = undefined, withAuth = true } = {}) {
+async function fetchJsonWithAuth(url, { method = "GET", body = undefined, withAuth = true, redirectOnAuthError = true } = {}) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (withAuth && state.auth?.token) {
@@ -476,11 +481,13 @@ async function fetchJsonWithAuth(url, { method = "GET", body = undefined, withAu
     const err = new Error(payload?.error || `HTTP ${response.status}`);
     err.status = response.status;
     err.payload = payload;
-    if (response.status === 401) {
-      clearAuthState();
-      window.location.href = "/login";
-    } else if (response.status === 403) {
-      window.location.href = "/prezzi";
+    if (redirectOnAuthError) {
+      if (response.status === 401) {
+        clearAuthState();
+        window.location.href = "/login";
+      } else if (response.status === 403) {
+        window.location.href = "/prezzi";
+      }
     }
     throw err;
   }
@@ -511,7 +518,7 @@ async function hydrateAuthFromStorage() {
   state.auth.token = token;
   try {
     const base = getMacroBackendBaseUrl();
-    const payload = await fetchJsonWithAuth(`${base}/api/auth/me`);
+    const payload = await fetchJsonWithAuth(`${base}/api/auth/me`, { redirectOnAuthError: false });
     state.auth.user = payload?.user || null;
     state.auth.expiresAt = payload?.expiresAt || null;
     applyAuthUi();
@@ -519,9 +526,9 @@ async function hydrateAuthFromStorage() {
       return { ok: false, reason: "no_access", user: payload?.user || null };
     }
     return { ok: true, user: payload?.user || null };
-  } catch {
+  } catch (error) {
     clearAuthState();
-    return { ok: false, reason: "invalid_session" };
+    return { ok: false, reason: error?.status === 401 ? "invalid_session" : "auth_error" };
   }
 }
 

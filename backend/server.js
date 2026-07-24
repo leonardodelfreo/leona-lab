@@ -156,6 +156,7 @@ function ensureDataDir() {
     migrateUsersEmailField();
   }
   loadSessionsFromDisk();
+  reconcileAdminUsers();
 }
 
 function getAssetById(assetId) {
@@ -302,6 +303,21 @@ function ensureAdminPrivileges(user) {
     changed = true;
   }
   return changed;
+}
+
+/** Allinea tutti gli account in whitelist admin (paidAt/role/plan). */
+function reconcileAdminUsers() {
+  try {
+    if (!ADMIN_EMAILS.size) return;
+    const users = readUsers();
+    let changed = false;
+    users.forEach((user) => {
+      if (ensureAdminPrivileges(user)) changed = true;
+    });
+    if (changed) writeUsers(users);
+  } catch {
+    // ignore
+  }
 }
 
 function evaluateUserAccess(user) {
@@ -1638,12 +1654,19 @@ const server = http.createServer(async (req, res) => {
       if (!found || !verifyPassword(password, found.passwordHash)) {
         return json(res, 401, { ok: false, error: "credenziali non valide" });
       }
+      // Se l'utente entra con email admin whitelist, forza privilegi anche se il record e incompleto.
+      if (isAdminEmail(loginId) || isAdminEmail(found.email)) {
+        found.email = found.email || loginId;
+        found.role = "admin";
+        found.plan = "lifetime";
+        if (!found.paidAt) found.paidAt = new Date().toISOString();
+      }
       let usersChanged = ensureAdminPrivileges(found);
       if (isLegacyPasswordHash(found.passwordHash)) {
         found.passwordHash = hashPassword(password);
         usersChanged = true;
       }
-      if (usersChanged) {
+      if (usersChanged || isAdminEmail(loginId) || isAdminEmail(found.email)) {
         writeUsers(users);
       }
       const access = evaluateUserAccess(found);
