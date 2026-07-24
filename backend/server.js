@@ -16,11 +16,14 @@ const COT_CACHE_PREFIX = path.join(DATA_DIR, "cot-");
 const USER_PREFS_DIR = path.join(DATA_DIR, "user-prefs");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const PAID_SESSIONS_FILE = path.join(DATA_DIR, "paid-sessions.json");
+const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const APP_BASE_URL = String(process.env.APP_BASE_URL || "").trim().replace(/\/$/, "");
 const REQUIRE_PAYMENT = Boolean(STRIPE_SECRET_KEY) && String(process.env.ALLOW_FREE_REGISTER || "").toLowerCase() !== "true";
+const ALLOW_SEED_USER = String(process.env.ALLOW_SEED_USER || "").toLowerCase() === "true";
+const IS_PRODUCTION = String(process.env.NODE_ENV || "").toLowerCase() === "production";
 const ADMIN_EMAILS = new Set(
   String(process.env.ADMIN_EMAILS || "")
     .split(",")
@@ -116,6 +119,10 @@ const macroState = {
 };
 
 const sessions = new Map();
+let sessionsDirty = false;
+let sessionsSaveTimer = null;
+
+const rateLimitBuckets = new Map();
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -125,20 +132,30 @@ function ensureDataDir() {
     fs.mkdirSync(USER_PREFS_DIR, { recursive: true });
   }
   if (!fs.existsSync(USERS_FILE)) {
-    const payload = {
-      users: [
-        {
-          username: "leona",
-          email: "leona@leonalab.com",
-          passwordHash: hashPassword("leona123"),
-          displayName: "Leona",
-        },
-      ],
-    };
-    fs.writeFileSync(USERS_FILE, JSON.stringify(payload, null, 2), "utf8");
+    // In produzione non creare account seed deboli, salvo opt-in esplicito.
+    if (!IS_PRODUCTION || ALLOW_SEED_USER) {
+      const payload = {
+        users: [
+          {
+            username: "leona",
+            email: "leona@leonalab.com",
+            passwordHash: hashPassword("leona123"),
+            displayName: "Leona",
+            plan: "lifetime",
+            role: "user",
+            paidAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
+      fs.writeFileSync(USERS_FILE, JSON.stringify(payload, null, 2), "utf8");
+    } else {
+      fs.writeFileSync(USERS_FILE, JSON.stringify({ users: [] }, null, 2), "utf8");
+    }
   } else {
     migrateUsersEmailField();
   }
+  loadSessionsFromDisk();
 }
 
 function getAssetById(assetId) {
@@ -147,7 +164,38 @@ function getAssetById(assetId) {
 }
 
 function hashPassword(password) {
-  return crypto.createHash("sha256").update(String(password || "")).digest("hex");
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derived = crypto.scryptSync(String(password || ""), salt, 64).toString("hex");
+  return `scrypt$${salt}$${derived}`;
+}
+
+function verifyPassword(password, storedHash) {
+  const hash = String(storedHash || "");
+  const plain = String(password || "");
+  if (hash.startsWith("scrypt$")) {
+    const parts = hash.split("$");
+    if (parts.length !== 3) return false;
+    const salt = parts[1];
+    const expected = parts[2];
+    const actual = crypto.scryptSync(plain, salt, 64).toString("hex");
+    try {
+      return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(actual, "hex"));
+    } catch {
+      return false;
+    }
+  }
+  // Legacy SHA-256 (migrazione trasparente al prossimo login ok).
+  const legacy = crypto.createHash("sha256").update(plain).digest("hex");
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(legacy, "hex"));
+  } catch {
+    return hash === legacy;
+  }
+}
+
+function isLegacyPasswordHash(storedHash) {
+  const hash = String(storedHash || "");
+  return Boolean(hash) && !hash.startsWith("scrypt$");
 }
 
 function normalizeEmail(value) {
@@ -494,13 +542,77 @@ function parseBearerToken(req) {
   return match[1].trim();
 }
 
+function loadSessionsFromDisk() {
+  try {
+    if (!fs.existsSync(SESSIONS_FILE)) return;
+    const parsed = JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf8"));
+    const entries = parsed?.sessions && typeof parsed.sessions === "object" ? parsed.sessions : {};
+    const now = Date.now();
+    sessions.clear();
+    Object.entries(entries).forEach(([token, session]) => {
+      if (!token || !session?.userId || !session?.expiresAt) return;
+      if (Number(session.expiresAt) <= now) return;
+      sessions.set(token, {
+        userId: String(session.userId),
+        displayName: String(session.displayName || session.userId),
+        expiresAt: Number(session.expiresAt),
+      });
+    });
+  } catch {
+    // ignore corrupt session file
+  }
+}
+
+function persistSessionsNow() {
+  try {
+    ensureDataDir();
+    const payload = { sessions: {} };
+    const now = Date.now();
+    for (const [token, session] of sessions.entries()) {
+      if (!session?.expiresAt || session.expiresAt <= now) continue;
+      payload.sessions[token] = {
+        userId: session.userId,
+        displayName: session.displayName || session.userId,
+        expiresAt: session.expiresAt,
+      };
+    }
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(payload, null, 2), "utf8");
+    sessionsDirty = false;
+  } catch {
+    // keep in-memory sessions even if disk write fails
+  }
+}
+
+function scheduleSessionsSave() {
+  sessionsDirty = true;
+  if (sessionsSaveTimer) return;
+  sessionsSaveTimer = setTimeout(() => {
+    sessionsSaveTimer = null;
+    if (sessionsDirty) persistSessionsNow();
+  }, 400);
+}
+
+function setSession(token, session) {
+  sessions.set(token, session);
+  scheduleSessionsSave();
+}
+
+function deleteSession(token) {
+  if (!token) return;
+  sessions.delete(token);
+  scheduleSessionsSave();
+}
+
 function cleanupExpiredSessions() {
   const now = Date.now();
+  let changed = false;
   for (const [token, session] of sessions.entries()) {
     if (!session?.expiresAt || session.expiresAt <= now) {
       sessions.delete(token);
+      changed = true;
     }
   }
+  if (changed) scheduleSessionsSave();
 }
 
 function getSessionFromRequest(req) {
@@ -510,6 +622,36 @@ function getSessionFromRequest(req) {
   const session = sessions.get(token);
   if (!session) return null;
   return { token, ...session };
+}
+
+function getClientIp(req) {
+  const xf = String(req.headers["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim();
+  return xf || req.socket?.remoteAddress || "unknown";
+}
+
+/** Rate limit semplice in-memory. Ritorna true se bloccato. */
+function isRateLimited(key, limit = 20, windowMs = 15 * 60 * 1000) {
+  const now = Date.now();
+  const bucket = rateLimitBuckets.get(key) || { count: 0, resetAt: now + windowMs };
+  if (now > bucket.resetAt) {
+    bucket.count = 0;
+    bucket.resetAt = now + windowMs;
+  }
+  bucket.count += 1;
+  rateLimitBuckets.set(key, bucket);
+  return bucket.count > limit;
+}
+
+function applySecurityHeaders(res) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (IS_PRODUCTION) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
 }
 
 function parseMacroDate(value) {
@@ -1244,6 +1386,7 @@ function startMacroScheduler() {
 
 function json(res, statusCode, data) {
   const payload = JSON.stringify(data);
+  applySecurityHeaders(res);
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(payload),
@@ -1256,6 +1399,7 @@ function serveStatic(req, res, pathname) {
   const normalized = pathname === "/" ? "/index.html" : pathname;
   const relative = String(normalized).replace(/^[/\\]+/, "").replace(/\\/g, "/");
   if (!relative || relative.split("/").includes("..")) {
+    applySecurityHeaders(res);
     res.writeHead(403);
     res.end("Forbidden");
     return;
@@ -1263,12 +1407,14 @@ function serveStatic(req, res, pathname) {
   const rootResolved = path.resolve(ROOT_DIR);
   const filePath = path.resolve(rootResolved, ...relative.split("/"));
   if (filePath !== rootResolved && !filePath.startsWith(rootResolved + path.sep)) {
+    applySecurityHeaders(res);
     res.writeHead(403);
     res.end("Forbidden");
     return;
   }
   fs.readFile(filePath, (err, content) => {
     if (err) {
+      applySecurityHeaders(res);
       res.writeHead(404);
       res.end("Not Found");
       return;
@@ -1289,12 +1435,14 @@ function serveStatic(req, res, pathname) {
     const cacheControl =
       ext === ".html" || ext === ".xml" || ext === ".txt" ? "public, max-age=300"
       : "public, max-age=86400";
+    applySecurityHeaders(res);
     res.writeHead(200, { "Content-Type": mime, "Cache-Control": cacheControl });
     res.end(content);
   });
 }
 
 const server = http.createServer(async (req, res) => {
+  applySecurityHeaders(res);
   const requestUrl = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`);
   const pathname = requestUrl.pathname;
 
@@ -1356,6 +1504,9 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/checkout" && req.method === "POST") {
     try {
+      if (isRateLimited(`checkout:${getClientIp(req)}`, 10, 15 * 60 * 1000)) {
+        return json(res, 429, { ok: false, error: "troppe richieste di checkout, riprova tra poco" });
+      }
       const stripe = getStripe();
       if (!stripe) {
         return json(res, 503, {
@@ -1473,6 +1624,9 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/auth/login" && req.method === "POST") {
     try {
+      if (isRateLimited(`login:${getClientIp(req)}`, 30, 15 * 60 * 1000)) {
+        return json(res, 429, { ok: false, error: "troppi tentativi di login, riprova tra poco" });
+      }
       const body = await readJsonBody(req);
       const loginId = normalizeEmail(body?.email || body?.username || "");
       const password = String(body?.password || "");
@@ -1481,16 +1635,21 @@ const server = http.createServer(async (req, res) => {
       }
       const users = readUsers();
       const found = users.find((u) => u.email === loginId || u.username === loginId);
-      if (!found || found.passwordHash !== hashPassword(password)) {
+      if (!found || !verifyPassword(password, found.passwordHash)) {
         return json(res, 401, { ok: false, error: "credenziali non valide" });
       }
-      if (ensureAdminPrivileges(found)) {
+      let usersChanged = ensureAdminPrivileges(found);
+      if (isLegacyPasswordHash(found.passwordHash)) {
+        found.passwordHash = hashPassword(password);
+        usersChanged = true;
+      }
+      if (usersChanged) {
         writeUsers(users);
       }
       const access = evaluateUserAccess(found);
       const token = crypto.randomBytes(24).toString("hex");
       const expiresAt = Date.now() + SESSION_TTL_MS;
-      sessions.set(token, {
+      setSession(token, {
         userId: found.username,
         displayName: found.displayName || found.username,
         expiresAt,
@@ -1509,6 +1668,9 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/auth/register" && req.method === "POST") {
     try {
+      if (isRateLimited(`register:${getClientIp(req)}`, 15, 60 * 60 * 1000)) {
+        return json(res, 429, { ok: false, error: "troppe registrazioni da questo IP, riprova piu tardi" });
+      }
       const body = await readJsonBody(req);
       const email = normalizeEmail(body?.email || "");
       const usernameRaw = String(body?.username || "").trim().toLowerCase();
@@ -1594,7 +1756,7 @@ const server = http.createServer(async (req, res) => {
 
       const token = crypto.randomBytes(24).toString("hex");
       const expiresAt = Date.now() + SESSION_TTL_MS;
-      sessions.set(token, {
+      setSession(token, {
         userId: username,
         displayName: displayName || username,
         expiresAt,
@@ -1639,7 +1801,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/auth/logout" && req.method === "POST") {
     const token = parseBearerToken(req);
-    if (token) sessions.delete(token);
+    if (token) deleteSession(token);
     return json(res, 200, { ok: true });
   }
 
@@ -1788,4 +1950,13 @@ ensureDataDir();
 startMacroScheduler();
 server.listen(PORT, HOST, () => {
   console.log(`[server] running on http://${HOST}:${PORT}`);
+});
+
+process.on("SIGTERM", () => {
+  persistSessionsNow();
+  process.exit(0);
+});
+process.on("SIGINT", () => {
+  persistSessionsNow();
+  process.exit(0);
 });
