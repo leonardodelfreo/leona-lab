@@ -1289,25 +1289,65 @@ function normalizeMacroCategory(eventName) {
   return "OTHER";
 }
 
-function isUsMacroCountry(value) {
-  const countryNorm = String(value || "US").toUpperCase();
-  return countryNorm === "US" || countryNorm === "USD" || countryNorm.includes("UNITED STATES") || countryNorm.includes("U.S.");
+const TRACKED_MACRO_CURRENCIES = ["USD", "EUR", "AUD", "JPY", "GBP", "CHF", "CAD", "NZD"];
+const TRACKED_MACRO_CURRENCY_SET = new Set(TRACKED_MACRO_CURRENCIES);
+
+/** Normalizza country/currency verso codice FX (USD, EUR, ...). Null se fuori perimetro. */
+function normalizeMacroCurrency(value) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return null;
+  if (TRACKED_MACRO_CURRENCY_SET.has(raw)) return raw;
+
+  if (raw === "US" || raw === "USA" || raw.includes("UNITED STATES") || raw.includes("U.S.")) return "USD";
+  if (
+    raw === "EU" ||
+    raw === "EMU" ||
+    raw.includes("EURO AREA") ||
+    raw.includes("EUROZONE") ||
+    raw.includes("EURO ZONE") ||
+    raw === "GERMANY" ||
+    raw === "FRANCE" ||
+    raw === "ITALY" ||
+    raw === "SPAIN" ||
+    raw === "NETHERLANDS" ||
+    raw === "ECB" ||
+    raw === "EURO"
+  ) {
+    return "EUR";
+  }
+  if (raw === "UK" || raw === "GB" || raw.includes("UNITED KINGDOM") || raw.includes("BRITAIN") || raw.includes("ENGLAND")) {
+    return "GBP";
+  }
+  if (raw === "JP" || raw.includes("JAPAN")) return "JPY";
+  if (raw === "AU" || raw.includes("AUSTRALIA")) return "AUD";
+  if (raw === "CA" || raw.includes("CANADA")) return "CAD";
+  if (raw === "CH" || raw.includes("SWITZERLAND") || raw.includes("SWISS")) return "CHF";
+  if (raw === "NZ" || raw.includes("NEW ZEALAND")) return "NZD";
+  return null;
+}
+
+function isTrackedMacroCountry(value) {
+  return Boolean(normalizeMacroCurrency(value));
 }
 
 function normalizeMacroRows(rows, sourceName, sourceUrl) {
   return (Array.isArray(rows) ? rows : [])
-    .map((r) => ({
-      date: parseMacroDate(r?.date),
-      country: String(r?.country || "US"),
-      event: String(r?.event || "").trim(),
-      category: String(r?.category || "OTHER").toUpperCase(),
-      impact: normalizeMacroImpact(r?.impact || "low"),
-      previous: String(r?.previous ?? "--"),
-      forecast: String(r?.forecast ?? "--"),
-      actual: String(r?.actual ?? "--"),
-      source: r?.source || `${sourceName} | ${sourceUrl}`,
-    }))
-    .filter((r) => r.event && isUsMacroCountry(r.country) && r.date instanceof Date && !Number.isNaN(r.date.getTime()));
+    .map((r) => {
+      const currency = normalizeMacroCurrency(r?.country);
+      if (!currency) return null;
+      return {
+        date: parseMacroDate(r?.date),
+        country: currency,
+        event: String(r?.event || "").trim(),
+        category: String(r?.category || "OTHER").toUpperCase(),
+        impact: normalizeMacroImpact(r?.impact || "low"),
+        previous: String(r?.previous ?? "--"),
+        forecast: String(r?.forecast ?? "--"),
+        actual: String(r?.actual ?? "--"),
+        source: r?.source || `${sourceName} | ${sourceUrl}`,
+      };
+    })
+    .filter((r) => r && r.event && r.date instanceof Date && !Number.isNaN(r.date.getTime()));
 }
 
 function dedupeMacroRows(rows) {
@@ -1706,8 +1746,8 @@ async function getCotRowsForAsset(assetId) {
 async function fetchMacroFromSources(preferredSource) {
   const sources = [
     {
-      name: "TradingEconomics-US",
-      url: "https://api.tradingeconomics.com/calendar/country/united%20states?c=guest:guest&f=json",
+      name: "TradingEconomics-G8",
+      url: "https://api.tradingeconomics.com/calendar/country/united%20states,euro%20area,germany,united%20kingdom,japan,australia,canada,switzerland,new%20zealand?c=guest:guest&f=json",
       parser: (raw, url) => {
         if (!Array.isArray(raw)) return [];
         return normalizeMacroRows(raw.map((r) => ({
@@ -1720,7 +1760,7 @@ async function fetchMacroFromSources(preferredSource) {
           forecast: r.Forecast ?? r.forecast ?? "--",
           actual: r.Actual ?? r.actual ?? "--",
           source: url,
-        })), "TradingEconomics-US", url);
+        })), "TradingEconomics-G8", url);
       },
     },
     {
@@ -1813,7 +1853,7 @@ async function fetchMacroFromSources(preferredSource) {
         mergedRows.push(...rows);
         usedSources.push(`${source.name}:${rows.length}`);
         const deduped = dedupeMacroRows(mergedRows);
-        if (hasFreshMacroWindow(deduped) && deduped.length >= 8) {
+        if (hasFreshMacroWindow(deduped) && deduped.length >= 12) {
           return {
             ok: true,
             rows: deduped,
@@ -1856,6 +1896,7 @@ async function fetchMacroFromSources(preferredSource) {
 function writeMacroCache(rows, source, mode) {
   ensureDataDir();
   const payload = {
+    version: 2,
     fetchedAt: new Date().toISOString(),
     source,
     mode,
@@ -1872,13 +1913,20 @@ function readMacroCache() {
     if (!fs.existsSync(MACRO_CACHE_FILE)) return null;
     const raw = fs.readFileSync(MACRO_CACHE_FILE, "utf8");
     const parsed = JSON.parse(raw);
+    // v2: calendario multi-valuta (USD/EUR/AUD/JPY/GBP/CHF/CAD/NZD)
+    if (Number(parsed?.version || 1) < 2) return null;
     const fetchedAtMs = parsed?.fetchedAt ? Date.parse(parsed.fetchedAt) || 0 : 0;
     if (!parsed?.rows?.length || !fetchedAtMs) return null;
     const ageMs = Date.now() - fetchedAtMs;
     if (ageMs > MACRO_CACHE_MAX_AGE_MS) return null;
     const rows = parsed.rows
-      .map((r) => ({ ...r, date: parseMacroDate(r.date) }))
-      .filter((r) => r.date instanceof Date && !Number.isNaN(r.date.getTime()));
+      .map((r) => {
+        const currency = normalizeMacroCurrency(r.country);
+        if (!currency) return null;
+        return { ...r, country: currency, date: parseMacroDate(r.date) };
+      })
+      .filter((r) => r && r.date instanceof Date && !Number.isNaN(r.date.getTime()));
+    if (!rows.length) return null;
     return {
       rows,
       source: `${parsed.source || "macro cache"} (cache reale temporanea)`,

@@ -113,6 +113,7 @@ const exportJournalCsvBtn = document.getElementById("exportJournalCsvBtn");
 const layoutModeEl = document.getElementById("layoutMode");
 const macroImpactFilterEl = document.getElementById("macroImpactFilter");
 const macroCategoryFilterEl = document.getElementById("macroCategoryFilter");
+const macroCurrencyFilterEl = document.getElementById("macroCurrencyFilter");
 const macroRefreshBtn = document.getElementById("macroRefreshBtn");
 const macroSourceInfoEl = document.getElementById("macroSourceInfo");
 const macroFeedStateBadgeEl = document.getElementById("macroFeedStateBadge");
@@ -218,6 +219,7 @@ const state = {
   macroSource: "--",
   macroImpactFilter: "ALL",
   macroCategoryFilter: "ALL",
+  macroCurrencyFilter: "ALL",
   macroPreferredSource: null,
   notifyChannel: "none",
   notifyWebhookUrl: "",
@@ -389,6 +391,7 @@ function buildPrefsSnapshot() {
     layoutMode: state.layoutMode,
     macroImpactFilter: state.macroImpactFilter,
     macroCategoryFilter: state.macroCategoryFilter,
+    macroCurrencyFilter: state.macroCurrencyFilter,
     macroPreferredSource: state.macroPreferredSource,
     notifyChannel: state.notifyChannel,
     notifyWebhookUrl: state.notifyWebhookUrl,
@@ -675,30 +678,34 @@ function applyLayoutMode(mode) {
 
 function getMacroEventDescription(eventName) {
   const e = String(eventName || "").toUpperCase();
-  if (e.includes("CPI") || e.includes("INFLATION")) {
-    return "Misura l'inflazione al consumo: impatta aspettative su tassi FED e USD, con alta volatilita sugli asset risk e metalli.";
+  if (e.includes("CPI") || e.includes("INFLATION") || e.includes("HICP")) {
+    return "Misura l'inflazione: impatta aspettative sui tassi della banca centrale e sulla valuta di riferimento.";
   }
-  if (e.includes("FOMC") || e.includes("FED")) {
-    return "Decisione/linea guida della Federal Reserve: influenza direttamente rendimenti reali e direzione del gold.";
+  if (e.includes("FOMC") || e.includes("FED") || e.includes("ECB") || e.includes("BOE") || e.includes("BOJ") || e.includes("RBA") || e.includes("BOC") || e.includes("SNB") || e.includes("RBNZ")) {
+    return "Decisione/linea guida di banca centrale: influenza tassi, FX e asset risk-on/risk-off.";
   }
-  if (e.includes("NFP") || e.includes("NON-FARM")) {
-    return "Dati occupazione USA: segnale chiave su forza economia e policy FED, evento ad alto impatto sul metallo.";
+  if (e.includes("NFP") || e.includes("NON-FARM") || e.includes("EMPLOYMENT") || e.includes("UNEMPLOYMENT") || e.includes("PAYROLL")) {
+    return "Dati sul mercato del lavoro: segnale chiave su forza economica e policy monetaria.";
   }
-  return "Dato macro rilevante per USD/tassi reali; puo alterare rapidamente sentiment e pricing multi-asset.";
+  if (e.includes("GDP") || e.includes("GROSS DOMESTIC")) {
+    return "Prodotto interno lordo: misura crescita economica e puo spostare aspettative su tassi e valuta.";
+  }
+  return "Dato macro rilevante per tassi/FX; puo alterare rapidamente sentiment e pricing multi-asset.";
 }
 
-function getMacroEventAudience(eventName, category) {
+function getMacroEventAudience(eventName, category, country = "") {
   const e = String(eventName || "").toUpperCase();
-  if (category === "CPI" || e.includes("CPI") || e.includes("INFLATION")) {
-    return "Riguarda FED, Treasury, USD, oro e asset sensibili ai tassi reali.";
+  const ccy = normalizeMacroCurrency(country) || String(country || "").toUpperCase() || "FX";
+  if (category === "CPI" || e.includes("CPI") || e.includes("INFLATION") || e.includes("HICP")) {
+    return `Riguarda tassi e ${ccy}: bond, FX e asset sensibili all'inflazione.`;
   }
-  if (category === "FOMC" || e.includes("FOMC") || e.includes("FED")) {
-    return "Riguarda politica monetaria USA: banche, bond, USD, gold e indici globali.";
+  if (category === "FOMC" || e.includes("FOMC") || e.includes("FED") || e.includes("ECB") || e.includes("BOE") || e.includes("BOJ")) {
+    return `Riguarda politica monetaria (${ccy}): banche, bond, FX e indici.`;
   }
-  if (category === "NFP" || e.includes("NFP") || e.includes("NON-FARM")) {
-    return "Riguarda mercato del lavoro USA: aspettative FED, dollaro, rendimenti e metalli.";
+  if (category === "NFP" || e.includes("NFP") || e.includes("EMPLOYMENT") || e.includes("UNEMPLOYMENT")) {
+    return `Riguarda lavoro/crescita (${ccy}) e aspettative sulla banca centrale.`;
   }
-  return "Riguarda principalmente USD, tassi USA e sentiment risk-on/risk-off.";
+  return `Riguarda principalmente ${ccy}, tassi locali e sentiment risk-on/risk-off.`;
 }
 
 function escapeHtml(value) {
@@ -892,26 +899,66 @@ const MACRO_REFRESH_MS_OK = 5 * 60 * 1000;
 const MACRO_REFRESH_MS_DEGRADED = 60 * 1000;
 const MACRO_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-function isUsMacroCountry(value) {
-  const countryNorm = String(value || "US").toUpperCase();
-  return countryNorm === "US" || countryNorm === "USD" || countryNorm.includes("UNITED STATES") || countryNorm.includes("U.S.");
+const TRACKED_MACRO_CURRENCIES = ["USD", "EUR", "AUD", "JPY", "GBP", "CHF", "CAD", "NZD"];
+const TRACKED_MACRO_CURRENCY_SET = new Set(TRACKED_MACRO_CURRENCIES);
+
+/** Normalizza country/currency verso codice FX (USD, EUR, ...). Null se fuori perimetro. */
+function normalizeMacroCurrency(value) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return null;
+  if (TRACKED_MACRO_CURRENCY_SET.has(raw)) return raw;
+
+  if (raw === "US" || raw === "USA" || raw.includes("UNITED STATES") || raw.includes("U.S.")) return "USD";
+  if (
+    raw === "EU" ||
+    raw === "EMU" ||
+    raw.includes("EURO AREA") ||
+    raw.includes("EUROZONE") ||
+    raw.includes("EURO ZONE") ||
+    raw === "GERMANY" ||
+    raw === "FRANCE" ||
+    raw === "ITALY" ||
+    raw === "SPAIN" ||
+    raw === "NETHERLANDS" ||
+    raw === "ECB" ||
+    raw === "EURO"
+  ) {
+    return "EUR";
+  }
+  if (raw === "UK" || raw === "GB" || raw.includes("UNITED KINGDOM") || raw.includes("BRITAIN") || raw.includes("ENGLAND")) {
+    return "GBP";
+  }
+  if (raw === "JP" || raw.includes("JAPAN")) return "JPY";
+  if (raw === "AU" || raw.includes("AUSTRALIA")) return "AUD";
+  if (raw === "CA" || raw.includes("CANADA")) return "CAD";
+  if (raw === "CH" || raw.includes("SWITZERLAND") || raw.includes("SWISS")) return "CHF";
+  if (raw === "NZ" || raw.includes("NEW ZEALAND")) return "NZD";
+  return null;
+}
+
+function isTrackedMacroCountry(value) {
+  return Boolean(normalizeMacroCurrency(value));
 }
 
 function normalizeMacroRows(rows, sourceName, sourceUrl) {
   return (Array.isArray(rows) ? rows : [])
-    .map((r) => ({
-      ...r,
-      date: parseMacroDate(r?.date),
-      event: String(r?.event || "").trim(),
-      country: String(r?.country || "US"),
-      category: String(r?.category || "OTHER").toUpperCase(),
-      impact: normalizeMacroImpact(r?.impact || "low"),
-      previous: String(r?.previous ?? "--"),
-      forecast: String(r?.forecast ?? "--"),
-      actual: String(r?.actual ?? "--"),
-      source: r?.source || `${sourceName} | ${sourceUrl}`,
-    }))
-    .filter((r) => r.event && isUsMacroCountry(r.country) && r.date instanceof Date && !Number.isNaN(r.date.getTime()))
+    .map((r) => {
+      const currency = normalizeMacroCurrency(r?.country);
+      if (!currency) return null;
+      return {
+        ...r,
+        date: parseMacroDate(r?.date),
+        event: String(r?.event || "").trim(),
+        country: currency,
+        category: String(r?.category || "OTHER").toUpperCase(),
+        impact: normalizeMacroImpact(r?.impact || "low"),
+        previous: String(r?.previous ?? "--"),
+        forecast: String(r?.forecast ?? "--"),
+        actual: String(r?.actual ?? "--"),
+        source: r?.source || `${sourceName} | ${sourceUrl}`,
+      };
+    })
+    .filter((r) => r && r.event && r.date instanceof Date && !Number.isNaN(r.date.getTime()))
     .map((r) => ({ ...r, time: formatRomeTime(r.date) }));
 }
 
@@ -975,10 +1022,12 @@ async function fetchMacroCalendarFromBackend() {
     .map((r) => {
       const dateObj = parseMacroDate(r.date);
       if (!dateObj) return null;
+      const currency = normalizeMacroCurrency(r.country);
+      if (!currency) return null;
       return {
         date: dateObj,
         time: formatRomeTime(dateObj),
-        country: String(r.country || "US"),
+        country: currency,
         event: String(r.event || "").trim(),
         category: String(r.category || "OTHER"),
         impact: normalizeMacroImpact(r.impact || "low"),
@@ -1065,10 +1114,12 @@ async function fetchBootstrapFromBackend(asset) {
     .map((r) => {
       const dateObj = parseMacroDate(r.date);
       if (!dateObj) return null;
+      const currency = normalizeMacroCurrency(r.country);
+      if (!currency) return null;
       return {
         date: dateObj,
         time: formatRomeTime(dateObj),
-        country: String(r.country || "US"),
+        country: currency,
         event: String(r.event || "").trim(),
         category: String(r.category || "OTHER"),
         impact: normalizeMacroImpact(r.impact || "low"),
@@ -1205,8 +1256,8 @@ async function fetchMacroCalendar() {
   }
   const sources = [
     {
-      name: "TradingEconomics-US",
-      url: "https://api.tradingeconomics.com/calendar/country/united%20states?c=guest:guest&f=json",
+      name: "TradingEconomics-G8",
+      url: "https://api.tradingeconomics.com/calendar/country/united%20states,euro%20area,germany,united%20kingdom,japan,australia,canada,switzerland,new%20zealand?c=guest:guest&f=json",
       parser: (raw, url) => {
         if (!Array.isArray(raw)) return [];
         const mapped = raw
@@ -1215,7 +1266,7 @@ async function fetchMacroCalendar() {
             const dateObj = parseMacroDate(r.Date || r.date || r.DateUtc || r.ReferenceDate);
             if (!event || !dateObj) return null;
             const country = String(r.Country || r.country || "US");
-            if (!isUsMacroCountry(country)) return null;
+            if (!isTrackedMacroCountry(country)) return null;
             const category = normalizeMacroCategory(`${r.Category || ""} ${event}`);
             const impact = normalizeMacroImpact(r.Importance || r.importance || r.Priority || "");
             return {
@@ -1231,7 +1282,7 @@ async function fetchMacroCalendar() {
             };
           })
           .filter(Boolean);
-        return normalizeMacroRows(mapped, "TradingEconomics-US", url);
+        return normalizeMacroRows(mapped, "TradingEconomics-G8", url);
       },
     },
     {
@@ -1245,7 +1296,7 @@ async function fetchMacroCalendar() {
             const dateObj = parseMacroDate(r.Date || r.date || r.DateUtc || r.ReferenceDate);
             if (!event || !dateObj) return null;
             const country = String(r.Country || r.country || "US");
-            if (!isUsMacroCountry(country)) return null;
+            if (!isTrackedMacroCountry(country)) return null;
             const category = normalizeMacroCategory(`${r.Category || ""} ${event}`);
             const impact = normalizeMacroImpact(r.Importance || r.importance || r.Priority || "");
             return {
@@ -1276,7 +1327,7 @@ async function fetchMacroCalendar() {
             if (!event || !dateObj) return null;
             const category = normalizeMacroCategory(event);
             const country = String(r.country || "US");
-            if (!isUsMacroCountry(country)) return null;
+            if (!isTrackedMacroCountry(country)) return null;
             const impact = normalizeMacroImpact(r.impact || r.importance || r.volatility || "");
             return {
               date: dateObj,
@@ -1306,7 +1357,7 @@ async function fetchMacroCalendar() {
             if (!event || !dateObj) return null;
             const category = normalizeMacroCategory(event);
             const country = String(r.country || "US");
-            if (!isUsMacroCountry(country)) return null;
+            if (!isTrackedMacroCountry(country)) return null;
             const impact = normalizeMacroImpact(r.impact || r.importance || r.volatility || "");
             return {
               date: dateObj,
@@ -1336,7 +1387,7 @@ async function fetchMacroCalendar() {
             const dateObj = parseMacroDate(r.date || r.datetime || r.time);
             if (!event || !dateObj) return null;
             const country = String(r.country || r.region || "US");
-            if (!isUsMacroCountry(country)) return null;
+            if (!isTrackedMacroCountry(country)) return null;
             const category = normalizeMacroCategory(event);
             const impact = normalizeMacroImpact(r.impact || r.importance || r.volatility || "");
             return {
@@ -1401,11 +1452,16 @@ function renderMacroCalendar() {
   if (!macroDaysContainerEl) return;
   const impactFilter = state.macroImpactFilter;
   const categoryFilter = state.macroCategoryFilter;
+  const currencyFilter = state.macroCurrencyFilter || "ALL";
   const now = Date.now();
   const minTs = now - 2 * 24 * 60 * 60 * 1000;
   const maxTs = now + 90 * 24 * 60 * 60 * 1000;
   const allValid = (state.macroEvents || [])
-    .filter((e) => e?.date instanceof Date && !Number.isNaN(e.date.getTime()))
+    .map((e) => {
+      const currency = normalizeMacroCurrency(e?.country) || String(e?.country || "").toUpperCase();
+      return { ...e, country: currency };
+    })
+    .filter((e) => e?.date instanceof Date && !Number.isNaN(e.date.getTime()) && TRACKED_MACRO_CURRENCY_SET.has(e.country))
     .sort((a, b) => a.date - b.date);
   const eligible = allValid
     .filter((e) => {
@@ -1414,6 +1470,7 @@ function renderMacroCalendar() {
     })
     .sort((a, b) => a.date - b.date);
   let filtered = eligible
+    .filter((e) => (currencyFilter === "ALL" ? true : e.country === currencyFilter))
     .filter((e) => (impactFilter === "ALL" ? true : e.impact === impactFilter))
     .filter((e) => {
       if (categoryFilter === "ALL") return true;
@@ -1423,7 +1480,8 @@ function renderMacroCalendar() {
   if (macroSourceInfoEl) {
     const lastSync = state.macroLastFetchAt ? new Date(state.macroLastFetchAt).toLocaleTimeString("it-IT") : "--";
     const liveSync = state.macroLastLiveSuccessAt ? new Date(state.macroLastLiveSuccessAt).toLocaleTimeString("it-IT") : "--";
-    macroSourceInfoEl.textContent = `Fonte macro: ${state.macroSource || "--"} | Eventi: ${filtered.length} | validi: ${allValid.length} | sync: ${lastSync} | live: ${liveSync}`;
+    const currencies = [...new Set(allValid.map((e) => e.country))].sort().join(",");
+    macroSourceInfoEl.textContent = `Fonte macro: ${state.macroSource || "--"} | Eventi: ${filtered.length} | validi: ${allValid.length} | valute: ${currencies || "--"} | sync: ${lastSync} | live: ${liveSync}`;
   }
   const src = String(state.macroSource || "").toLowerCase();
   if (src.includes("live merge")) {
@@ -1468,7 +1526,7 @@ function renderMacroCalendar() {
           const impactLabel = e.impact === "high" ? "Alta" : e.impact === "medium" ? "Media" : "Bassa";
           const categoryLabel = e.category === "OTHER" ? "Macro" : e.category;
           const description = getMacroEventDescription(e.event);
-          const audience = getMacroEventAudience(e.event, e.category);
+          const audience = getMacroEventAudience(e.event, e.category, e.country);
           const eventTime = escapeHtml(e.time || "--");
           const country = escapeHtml(e.country || "--");
           const eventName = escapeHtml(e.event || "--");
@@ -5427,6 +5485,12 @@ function wireEvents() {
     savePrefs();
   });
 
+  macroCurrencyFilterEl?.addEventListener("change", () => {
+    state.macroCurrencyFilter = macroCurrencyFilterEl.value || "ALL";
+    renderMacroCalendar();
+    savePrefs();
+  });
+
   macroCategoryFilterEl?.addEventListener("change", () => {
     state.macroCategoryFilter = macroCategoryFilterEl.value || "ALL";
     renderMacroCalendar();
@@ -5523,6 +5587,9 @@ async function init() {
     }
     if (prefs.macroCategoryFilter) {
       state.macroCategoryFilter = prefs.macroCategoryFilter;
+    }
+    if (prefs.macroCurrencyFilter) {
+      state.macroCurrencyFilter = prefs.macroCurrencyFilter;
     }
     if (prefs.macroPreferredSource) {
       state.macroPreferredSource = String(prefs.macroPreferredSource);
@@ -5622,6 +5689,10 @@ async function init() {
   if (macroImpactFilterEl) {
     macroImpactFilterEl.value = state.macroImpactFilter;
     state.macroImpactFilter = macroImpactFilterEl.value || "ALL";
+  }
+  if (macroCurrencyFilterEl) {
+    macroCurrencyFilterEl.value = state.macroCurrencyFilter || "ALL";
+    state.macroCurrencyFilter = macroCurrencyFilterEl.value || "ALL";
   }
   if (macroCategoryFilterEl) {
     macroCategoryFilterEl.value = state.macroCategoryFilter;
