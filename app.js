@@ -2186,127 +2186,154 @@ function quantile(sortedArr, q) {
   return sortedArr[base];
 }
 
+/**
+ * Supreme Seasonality (TradingView-compatible):
+ * somma log-return per indice giorno di trading sugli anni storici,
+ * media / lookbackYears, curva cumulata * 100.
+ * Linea grigia se lo storico richiesto e completo, rossa altrimenti.
+ */
 function buildSeasonalityPathSeries(prices, yearsSetting) {
-  // Andamento stagionale realistico giornaliero:
-  // per ogni anno normalizza a base 100, poi aggrega per giorno calendario (MM-DD)
-  // e calcola media/bande statistiche sugli anni selezionati.
+  const empty = {
+    labels: [],
+    dayKeys: [],
+    avgPath: [],
+    medianPath: [],
+    lowPath: [],
+    highPath: [],
+    q1Path: [],
+    q3Path: [],
+    yearTraces: [],
+    currentYearTrace: null,
+    coveragePct: 0,
+    usedYears: [],
+    plotColor: "#c44c4c",
+    style: "supreme",
+    lookbackYears: 0,
+    yearsWithData: 0,
+    todayTradingDayIndex: -1,
+  };
+
+  const sorted = [...(Array.isArray(prices) ? prices : [])]
+    .filter((p) => p?.date instanceof Date && Number.isFinite(p.close) && p.close > 0)
+    .sort((a, b) => a.date - b.date);
+  if (sorted.length < 40) return empty;
+
+  const now = new Date();
+  const currentYear = now.getUTCFullYear();
+  const previousYear = currentYear - 1;
+  let lookbackYears = 10;
+  if (yearsSetting !== "ALL") {
+    const n = Number(yearsSetting);
+    if (Number.isFinite(n) && n > 0) lookbackYears = Math.floor(n);
+  } else {
+    const minYear = sorted[0].date.getUTCFullYear();
+    lookbackYears = Math.max(1, previousYear - minYear + 1);
+  }
+
+  // Finestra Pine: da dopo (previousYear - lookbackYears)-12-31 fino a previousYear-12-31
+  const histStartYear = previousYear - lookbackYears + 1;
+  const histYears = [];
+  for (let y = histStartYear; y <= previousYear; y += 1) histYears.push(y);
+
   const byYear = new Map();
-  prices.forEach((p) => {
+  sorted.forEach((p) => {
     const y = p.date.getUTCFullYear();
     if (!byYear.has(y)) byYear.set(y, []);
     byYear.get(y).push(p);
   });
 
-  let years = [...byYear.keys()].sort((a, b) => a - b);
-  const nowYear = new Date().getUTCFullYear();
-  // Anni storici: almeno ~6 mesi di sedute; anno corrente: basta un campione minimo.
-  years = years.filter((y) => {
-    const n = byYear.get(y)?.length || 0;
-    return y === nowYear ? n >= 20 : n >= 120;
-  });
-  if (!years.length) {
-    return { labels: [], avgPath: [], medianPath: [], lowPath: [], highPath: [], q1Path: [], q3Path: [], yearTraces: [], currentYearTrace: null, usedYears: [] };
-  }
+  const maxDays = 400;
+  const sumByDay = new Array(maxDays).fill(0);
+  const countByDay = new Array(maxDays).fill(0);
+  const datesByDay = Array.from({ length: maxDays }, () => []);
+  const usedYears = [];
 
-  if (yearsSetting !== "ALL") {
-    const n = Number(yearsSetting);
-    if (Number.isFinite(n) && n > 0) {
-      years = years.slice(-n);
+  histYears.forEach((y) => {
+    const arr = byYear.get(y);
+    if (!arr || arr.length < 40) return;
+    usedYears.push(y);
+    for (let i = 1; i < arr.length && i - 1 < maxDays; i += 1) {
+      const prev = arr[i - 1].close;
+      const curr = arr[i].close;
+      if (!(prev > 0 && curr > 0)) continue;
+      const dayIndex = i - 1;
+      const logReturn = Math.log(curr / prev);
+      sumByDay[dayIndex] += logReturn;
+      countByDay[dayIndex] += 1;
+      datesByDay[dayIndex].push(arr[i].date);
+    }
+  });
+
+  if (!usedYears.length) return { ...empty, lookbackYears };
+
+  let maxIdx = -1;
+  for (let i = 0; i < maxDays; i += 1) {
+    if (countByDay[i] > 0) maxIdx = i;
+  }
+  if (maxIdx < 1) return { ...empty, lookbackYears, usedYears, yearsWithData: usedYears.length };
+
+  // Pine divide sempre per lookbackYears (non per count reale del giorno).
+  const avgDaily = [];
+  const labels = [];
+  const dayKeys = [];
+  let lastMonthLabel = "";
+  for (let i = 0; i <= maxIdx; i += 1) {
+    avgDaily.push(sumByDay[i] / lookbackYears);
+    dayKeys.push(String(i + 1));
+    const sampleDates = datesByDay[i];
+    if (sampleDates.length) {
+      const mid = sampleDates[Math.floor(sampleDates.length / 2)];
+      const monthLbl = MONTH_LABELS[mid.getUTCMonth()];
+      const dayNum = mid.getUTCDate();
+      // Etichetta leggibile: mostra mese quando cambia, altrimenti giorno trading.
+      if (monthLbl !== lastMonthLabel && dayNum <= 5) {
+        labels.push(monthLbl);
+        lastMonthLabel = monthLbl;
+      } else {
+        labels.push(String(i + 1));
+      }
+    } else {
+      labels.push(String(i + 1));
     }
   }
-
-  const normalizedEntries = years.map((y) => {
-    const arr = [...byYear.get(y)].sort((a, b) => a.date - b.date);
-    const base = arr[0]?.close;
-    if (!Number.isFinite(base) || base <= 0) return null;
-    const byDay = new Map();
-    arr.forEach((p) => {
-      const mm = String(p.date.getUTCMonth() + 1).padStart(2, "0");
-      const dd = String(p.date.getUTCDate()).padStart(2, "0");
-      const key = `${mm}-${dd}`;
-      byDay.set(key, (p.close / base) * 100);
-    });
-    return { year: y, byDay };
-  }).filter(Boolean);
-
-  if (!normalizedEntries.length) {
-    return { labels: [], avgPath: [], medianPath: [], lowPath: [], highPath: [], q1Path: [], q3Path: [], yearTraces: [], currentYearTrace: null, usedYears: [] };
-  }
-
-  const dayKeySet = new Set();
-  normalizedEntries.forEach((entry) => {
-    entry.byDay.forEach((_, key) => dayKeySet.add(key));
-  });
-  const orderedDayKeys = [...dayKeySet].sort((a, b) => {
-    const [ma, da] = a.split("-").map(Number);
-    const [mb, db] = b.split("-").map(Number);
-    return ma === mb ? da - db : ma - mb;
-  });
-
-  // Tieni giorni con copertura sufficiente sugli anni selezionati.
-  const minCoverage = Math.min(normalizedEntries.length, Math.max(1, Math.ceil(normalizedEntries.length * 0.6)));
-  const dayKeys = orderedDayKeys.filter((key) => {
-    let count = 0;
-    for (const entry of normalizedEntries) {
-      if (entry.byDay.has(key)) count += 1;
-    }
-    return count >= minCoverage;
-  });
 
   const avgPath = [];
-  const medianPath = [];
-  const lowPath = [];
-  const highPath = [];
-  const q1Path = [];
-  const q3Path = [];
-  dayKeys.forEach((key) => {
-    const vals = normalizedEntries
-      .map((entry) => entry.byDay.get(key))
-      .filter((v) => Number.isFinite(v));
-    if (!vals.length) return;
-    const sorted = [...vals].sort((a, b) => a - b);
-    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-    avgPath.push(avg);
-    medianPath.push(quantile(sorted, 0.5));
-    lowPath.push(sorted[0]);
-    highPath.push(sorted[sorted.length - 1]);
-    q1Path.push(quantile(sorted, 0.25));
-    q3Path.push(quantile(sorted, 0.75));
-  });
+  let cumulative = 0;
+  for (let i = 0; i < avgDaily.length; i += 1) {
+    cumulative += avgDaily[i];
+    avgPath.push(cumulative * 100);
+  }
 
-  const coveragePct = normalizedEntries.length
-    ? (dayKeys.length / orderedDayKeys.length) * 100
-    : 0;
+  // Anno corrente: indice giorno di trading (per marker "oggi").
+  let todayTradingDayIndex = -1;
+  const currentArr = byYear.get(currentYear) || [];
+  if (currentArr.length >= 2) {
+    todayTradingDayIndex = Math.min(maxIdx, currentArr.length - 2);
+  }
 
-  const labels = dayKeys.map((key) => {
-    const [m, d] = key.split("-").map(Number);
-    return `${String(d).padStart(2, "0")} ${MONTH_LABELS[m - 1]}`;
-  });
-
-  const yearTraces = normalizedEntries.map((entry) => ({
-    year: entry.year,
-    values: dayKeys.map((key) => {
-      const v = entry.byDay.get(key);
-      return Number.isFinite(v) ? v : null;
-    }),
-  }));
-
-  const currentYear = Math.max(...normalizedEntries.map((e) => e.year));
-  const currentYearTrace = yearTraces.find((t) => t.year === currentYear) || null;
+  const yearsWithData = usedYears.length;
+  const enoughHistory = yearsWithData >= lookbackYears;
+  const coveragePct = lookbackYears > 0 ? (yearsWithData / lookbackYears) * 100 : 0;
 
   return {
     labels,
     dayKeys,
     avgPath,
-    medianPath,
-    lowPath,
-    highPath,
-    q1Path,
-    q3Path,
-    yearTraces,
-    currentYearTrace,
+    medianPath: avgPath.slice(),
+    lowPath: avgPath.map(() => 0),
+    highPath: avgPath.slice(),
+    q1Path: avgPath.slice(),
+    q3Path: avgPath.slice(),
+    yearTraces: [],
+    currentYearTrace: null,
     coveragePct,
-    usedYears: normalizedEntries.map((e) => e.year),
+    usedYears,
+    plotColor: enoughHistory ? "#9aa3ad" : "#c44c4c",
+    style: "supreme",
+    lookbackYears,
+    yearsWithData,
+    todayTradingDayIndex,
+    avgDailyReturns: avgDaily,
   };
 }
 
@@ -2619,7 +2646,7 @@ function renderSeasonalitySection(payload, sourceLabel = "") {
     const yearsUsed = seasonalityPath.usedYears?.length || 0;
     const coverage = Number.isFinite(seasonalityPath.coveragePct) ? fmtNum(seasonalityPath.coveragePct, 1) : "--";
     const suffix = sourceLabel ? ` | fonte: ${sourceLabel}` : "";
-    seasonalityWindowInfoEl.textContent = `Finestra: ${y} | media giornaliera MM-DD | copertura: ${coverage}% | punti: ${seasonalityBasePrices.length} | anni usati: ${yearsUsed}${suffix}`;
+    seasonalityWindowInfoEl.textContent = `Supreme Seasonality: ${y} richiesti | ${yearsUsed} anni storici usati | copertura: ${coverage}% | punti: ${seasonalityBasePrices.length} | curva log-return cumulata${suffix}`;
   }
   state.sourceHealth.seasonality = {
     status: /fallback|sintetic|degradato/i.test(sourceLabel) ? "degraded" : "ok",
@@ -3627,12 +3654,10 @@ function renderSeasonalityInsights(seasonality, seasonalityStats, startMonth, ho
   const next3 = [1, 2, 3].map((step) => seasonality[(currentMonth + step) % 12] || 0);
   const next3Avg = next3.reduce((a, b) => a + b, 0) / next3.length;
   const forward = computeForwardSeasonality(seasonality, startMonth, horizon);
-  const today = new Date();
-  const todayKey = `${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
-  const todayIdx = seasonalityPath?.dayKeys?.indexOf(todayKey) ?? -1;
+  const todayIdx = Number.isFinite(seasonalityPath?.todayTradingDayIndex)
+    ? seasonalityPath.todayTradingDayIndex
+    : -1;
   const todaySeasonal = todayIdx >= 0 ? seasonalityPath?.avgPath?.[todayIdx] : null;
-  const todayCurrentYear = todayIdx >= 0 ? seasonalityPath?.currentYearTrace?.values?.[todayIdx] : null;
-  const todayDiff = Number.isFinite(todaySeasonal) && Number.isFinite(todayCurrentYear) ? todayCurrentYear - todaySeasonal : null;
   const currentTiming = Array.isArray(dayTiming) ? dayTiming[currentMonth] : null;
   const focusLong = currentTiming?.bestLong;
   const focusShort = currentTiming?.bestShort;
@@ -3641,6 +3666,7 @@ function renderSeasonalityInsights(seasonality, seasonalityStats, startMonth, ho
         window: 8,
         minSeparation: 14,
         maxEach: 7,
+        minProminence: 0.15,
       })
     : { peaks: [], troughs: [] };
   const peaks = turningClose.peaks;
@@ -3666,19 +3692,19 @@ function renderSeasonalityInsights(seasonality, seasonalityStats, startMonth, ho
 
   const cards = [
     {
-      label: "Prossimo massimo (chiusura)",
-      value: nextPeak?.label || "--",
+      label: "Prossimo massimo (curva)",
+      value: nextPeak ? `Giorno ${nextPeak.key || nextPeak.label}` : "--",
       note: nextPeak
-        ? `Tra ~${nextPeak.daysAhead} gg · chiusura media ${fmtNum(nextPeak.value, 2)}`
-        : "Picchi non rilevati sulla media EOD",
+        ? `Tra ~${nextPeak.daysAhead} gg trading · cumulato ${fmtNum(nextPeak.value, 2)}%`
+        : "Picchi non rilevati sulla curva Supreme",
       cls: "up",
     },
     {
-      label: "Prossimo minimo (chiusura)",
-      value: nextTrough?.label || "--",
+      label: "Prossimo minimo (curva)",
+      value: nextTrough ? `Giorno ${nextTrough.key || nextTrough.label}` : "--",
       note: nextTrough
-        ? `Tra ~${nextTrough.daysAhead} gg · chiusura media ${fmtNum(nextTrough.value, 2)}`
-        : "Fondi non rilevati sulla media EOD",
+        ? `Tra ~${nextTrough.daysAhead} gg trading · cumulato ${fmtNum(nextTrough.value, 2)}%`
+        : "Fondi non rilevati sulla curva Supreme",
       cls: "down",
     },
     {
@@ -3718,12 +3744,14 @@ function renderSeasonalityInsights(seasonality, seasonalityStats, startMonth, ho
       cls: next3Avg >= 0 ? "up" : "down",
     },
     {
-      label: "Oggi vs media stag.",
-      value: Number.isFinite(todayDiff) ? `${todayDiff >= 0 ? "+" : ""}${fmtNum(todayDiff, 2)}` : "--",
-      note: Number.isFinite(todaySeasonal)
-        ? `Media ${fmtNum(todaySeasonal, 2)} | Anno corr. ${fmtNum(todayCurrentYear, 2)}`
+      label: "Oggi sulla curva Supreme",
+      value: Number.isFinite(todaySeasonal)
+        ? `${todaySeasonal >= 0 ? "+" : ""}${fmtNum(todaySeasonal, 2)}%`
+        : "--",
+      note: todayIdx >= 0
+        ? `Giorno di trading ${todayIdx + 1} · log-return cumulato medio`
         : "Giorno non disponibile nel campione",
-      cls: Number.isFinite(todayDiff) ? (todayDiff >= 0 ? "up" : "down") : "",
+      cls: Number.isFinite(todaySeasonal) ? (todaySeasonal >= 0 ? "up" : "down") : "",
     },
     {
       label: `Long day ${MONTH_LABELS[currentMonth]}`,
@@ -4088,164 +4116,65 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
   }
 
   if (state.seasonalityMode === "line") {
-    // Una sola andatura su chiusure EOD medie: un giorno = o massimo o minimo, mai entrambi.
     const usePath = (seasonalityPath?.avgPath?.length || 0) >= 2;
     const lineLabels = usePath ? seasonalityPath.labels : [];
     const avgPath = usePath ? seasonalityPath.avgPath || [] : [];
-    const highPath = usePath ? seasonalityPath.highPath || [] : [];
-    const lowPath = usePath ? seasonalityPath.lowPath || [] : [];
-    const yIsIndex = usePath;
     const dayKeys = usePath ? seasonalityPath.dayKeys || [] : [];
-    const currentYearTrace = usePath ? seasonalityPath.currentYearTrace : null;
-
-    const turning = usePath
-      ? findSeasonalTurningPoints(avgPath, dayKeys, lineLabels, { window: 8, minSeparation: 14, maxEach: 7 })
-      : { peaks: [], troughs: [] };
-    const peaks = turning.peaks;
-    const troughs = turning.troughs;
-
-    // Safety: nessun indice condiviso tra max e min.
-    const troughIdx = new Set(troughs.map((t) => t.idx));
-    const cleanPeaks = peaks.filter((p) => !troughIdx.has(p.idx));
-    const peakIdx = new Set(cleanPeaks.map((p) => p.idx));
-    const cleanTroughs = troughs.filter((t) => !peakIdx.has(t.idx));
+    const plotColor = seasonalityPath?.plotColor || "#9aa3ad";
+    const todayIdx = Number.isFinite(seasonalityPath?.todayTradingDayIndex)
+      ? seasonalityPath.todayTradingDayIndex
+      : -1;
 
     if (chartTitleEl) {
+      const yearsReq = seasonalityPath?.lookbackYears || state.seasonalityYears || "--";
+      const yearsHave = seasonalityPath?.yearsWithData || 0;
       chartTitleEl.textContent = usePath
-        ? `Stagionalita EOD · chiusure medie · ${cleanPeaks.length} max / ${cleanTroughs.length} min`
-        : "Stagionalita giornaliera";
+        ? `Supreme Seasonality · log-return cumulati · ${yearsHave}/${yearsReq} anni`
+        : "Supreme Seasonality";
     }
-
-    const peakSeries = Array.from({ length: lineLabels.length }, () => null);
-    const troughSeries = Array.from({ length: lineLabels.length }, () => null);
-    cleanPeaks.forEach((p) => {
-      peakSeries[p.idx] = p.value;
-    });
-    cleanTroughs.forEach((t) => {
-      troughSeries[t.idx] = t.value;
-    });
 
     const datasets = [];
-
-    // Range storico solo come contesto (non genera marker).
-    if (usePath && highPath.length && lowPath.length) {
-      datasets.push(
-        {
-          label: "Max storico (contesto)",
-          data: highPath,
-          borderColor: "rgba(61, 214, 140, 0.28)",
-          borderWidth: 1,
-          pointRadius: 0,
-          fill: false,
-          tension: 0.05,
-          order: 6,
-        },
-        {
-          label: "Range Max-Min",
-          data: lowPath,
-          borderColor: "rgba(0,0,0,0)",
-          backgroundColor: "rgba(95, 140, 175, 0.12)",
-          borderWidth: 0,
-          pointRadius: 0,
-          fill: "-1",
-          tension: 0.05,
-          order: 7,
-        },
-        {
-          label: "Min storico (contesto)",
-          data: lowPath,
-          borderColor: "rgba(227, 138, 90, 0.28)",
-          borderWidth: 1,
-          pointRadius: 0,
-          fill: false,
-          tension: 0.05,
-          order: 6,
-        }
-      );
-    }
-
     if (usePath) {
       datasets.push({
-        label: "Chiusura media EOD",
-        data: avgPath,
-        borderColor: "#dceaf7",
-        backgroundColor: "rgba(220,234,247,0.08)",
-        borderWidth: 2.6,
+        label: "Zero",
+        data: avgPath.map(() => 0),
+        borderColor: "rgba(20, 22, 26, 0.95)",
+        borderWidth: 1.2,
+        borderDash: [6, 5],
         pointRadius: 0,
         fill: false,
-        tension: 0.05,
-        order: 3,
+        tension: 0,
+        order: 5,
       });
-    }
-
-    if (usePath && currentYearTrace?.values?.length && state.seasonalityTraceMode !== "none") {
       datasets.push({
-        label: `Anno corrente ${currentYearTrace.year}`,
-        data: currentYearTrace.values,
-        borderColor: "rgba(247, 211, 139, 0.9)",
+        label: "Supreme Seasonality",
+        data: avgPath,
+        borderColor: plotColor,
+        backgroundColor: "transparent",
+        borderWidth: 2.2,
         pointRadius: 0,
-        borderWidth: 1.6,
-        borderDash: [5, 4],
         fill: false,
         tension: 0.05,
         order: 2,
       });
     }
 
-    if (usePath && cleanPeaks.length) {
+    if (usePath && todayIdx >= 0 && todayIdx < avgPath.length && Number.isFinite(avgPath[todayIdx])) {
+      const markerToday = Array.from({ length: lineLabels.length }, (_, idx) =>
+        idx === todayIdx ? avgPath[todayIdx] : null
+      );
       datasets.push({
-        label: "Massimo (chiusura)",
-        data: peakSeries,
+        label: "Oggi",
+        data: markerToday,
         borderColor: "rgba(0,0,0,0)",
-        backgroundColor: "#3dd68c",
-        pointRadius: 6,
-        pointHoverRadius: 8,
-        pointStyle: "triangle",
-        pointRotation: 0,
+        backgroundColor: "#f7d38b",
+        pointRadius: 5,
+        pointHoverRadius: 6.5,
         borderWidth: 0,
         showLine: false,
-        order: 1,
+        order: 0,
       });
     }
-
-    if (usePath && cleanTroughs.length) {
-      datasets.push({
-        label: "Minimo (chiusura)",
-        data: troughSeries,
-        borderColor: "rgba(0,0,0,0)",
-        backgroundColor: "#e38a5a",
-        pointRadius: 6,
-        pointHoverRadius: 8,
-        pointStyle: "triangle",
-        pointRotation: 180,
-        borderWidth: 0,
-        showLine: false,
-        order: 1,
-      });
-    }
-
-    if (usePath && dayKeys.length) {
-      const today = new Date();
-      const todayKey = `${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
-      const todayIdx = dayKeys.indexOf(todayKey);
-      if (todayIdx >= 0 && Number.isFinite(avgPath[todayIdx])) {
-        const markerToday = Array.from({ length: lineLabels.length }, (_, idx) => (idx === todayIdx ? avgPath[todayIdx] : null));
-        datasets.push({
-          label: "Oggi",
-          data: markerToday,
-          borderColor: "rgba(0,0,0,0)",
-          backgroundColor: "#f7d38b",
-          pointRadius: 5,
-          pointHoverRadius: 6.5,
-          borderWidth: 0,
-          showLine: false,
-          order: 0,
-        });
-      }
-    }
-
-    const peakByIdx = new Map(cleanPeaks.map((p) => [p.idx, p]));
-    const troughByIdx = new Map(cleanTroughs.map((t) => [t.idx, t]));
 
     state.seasonalityChart = new Chart(canvas, {
       type: "line",
@@ -4262,42 +4191,22 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
             labels: {
               color: "#ecf5ff",
               usePointStyle: true,
-              filter: (item) => !["Range Max-Min", "Max storico (contesto)", "Min storico (contesto)"].includes(item.text),
+              filter: (item) => item.text !== "Zero",
             },
           },
           tooltip: {
             callbacks: {
               title: (items) => {
                 const idx = items?.[0]?.dataIndex;
-                const label = lineLabels[idx];
-                return typeof label === "string" ? `${label} · chiusura EOD` : "Chiusura EOD";
+                const day = dayKeys[idx] || lineLabels[idx];
+                return `Giorno di trading ${day}`;
               },
               label: (ctx) => {
-                const i = ctx.dataIndex;
-                const name = ctx.dataset.label;
-                if (name === "Range Max-Min" || name === "Max storico (contesto)" || name === "Min storico (contesto)") return null;
-                if (name === "Massimo (chiusura)") {
-                  const peak = peakByIdx.get(i);
-                  if (!peak) return null;
-                  return `Massimo di chiusura: ${fmtNum(peak.value, 2)}`;
+                if (ctx.dataset.label === "Zero") return null;
+                if (ctx.dataset.label === "Oggi") {
+                  return `Oggi: ${fmtNum(ctx.raw, 2)}% cumulato`;
                 }
-                if (name === "Minimo (chiusura)") {
-                  const trough = troughByIdx.get(i);
-                  if (!trough) return null;
-                  return `Minimo di chiusura: ${fmtNum(trough.value, 2)}`;
-                }
-                if (name === "Chiusura media EOD") {
-                  return `Chiusura media: ${fmtNum(ctx.raw, 2)}`;
-                }
-                if (name === "Oggi") return `Oggi (chiusura media): ${fmtNum(ctx.raw, 2)}`;
-                return `${name}: ${fmtNum(ctx.raw, 2)}`;
-              },
-              afterBody: (items) => {
-                const i = items?.[0]?.dataIndex;
-                if (!Number.isFinite(i)) return [];
-                if (peakByIdx.has(i)) return ["Giorno di massimo sulla media delle chiusure (non puo essere anche minimo)"];
-                if (troughByIdx.has(i)) return ["Giorno di minimo sulla media delle chiusure (non puo essere anche massimo)"];
-                return [];
+                return `Cumulato: ${fmtNum(ctx.raw, 2)}%`;
               },
             },
           },
@@ -4319,34 +4228,24 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
             ticks: {
               color: "#9fb8cc",
               autoSkip: true,
-              maxTicksLimit: usePath ? 72 : 12,
+              maxTicksLimit: 48,
               maxRotation: 0,
               minRotation: 0,
-              callback: (value, idx) => {
-                const label = lineLabels[idx];
-                if (!usePath || typeof label !== "string") return label;
-                const [dayRaw, monthRaw] = label.split(" ");
-                const day = Number(dayRaw);
-                if (day === 1) return monthRaw;
-                return dayRaw;
-              },
             },
-            grid: {
-              color: (ctx) => {
-                if (!usePath) return "rgba(61,102,139,0.32)";
-                const label = lineLabels[ctx.index];
-                if (typeof label !== "string") return "rgba(61,102,139,0.32)";
-                const [dayRaw] = label.split(" ");
-                return Number(dayRaw) === 1 ? "rgba(122,163,201,0.48)" : "rgba(61,102,139,0.18)";
-              },
-            },
+            grid: { color: "rgba(61,102,139,0.22)" },
           },
           y: {
             ticks: {
               color: "#9fb8cc",
-              callback: (v) => (yIsIndex ? `${fmtNum(v, 1)}` : `${v}%`),
+              callback: (v) => `${fmtNum(v, 1)}%`,
             },
-            grid: { color: "rgba(61,102,139,0.32)" },
+            grid: { color: "rgba(61,102,139,0.28)" },
+            title: {
+              display: true,
+              text: "Log-return cumulato medio (%)",
+              color: "#9fb8cc",
+              font: { size: 11 },
+            },
           },
         },
       },
