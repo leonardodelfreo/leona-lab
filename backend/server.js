@@ -18,6 +18,9 @@ const USERS_FILE = path.join(DATA_DIR, "users.json");
 const PAID_SESSIONS_FILE = path.join(DATA_DIR, "paid-sessions.json");
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_FAILED_LOGIN_ATTEMPTS = 3;
+const LOGIN_LOCK_MS = 30 * 60 * 1000;
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
 const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
@@ -283,7 +286,15 @@ function readUsers() {
           role,
           stripeSessionId: u.stripeSessionId || null,
           stripeCustomerId: u.stripeCustomerId || null,
+          stripeSubscriptionId: u.stripeSubscriptionId || null,
+          subscriptionStatus: u.subscriptionStatus || null,
+          subscriptionEndsAt: u.subscriptionEndsAt || null,
           paidAt: u.paidAt || null,
+          accessBlocked: Boolean(u.accessBlocked),
+          accessBlockedReason: u.accessBlockedReason || null,
+          accessBlockedAt: u.accessBlockedAt || null,
+          failedLoginAttempts: Number(u.failedLoginAttempts || 0) || 0,
+          loginLockedUntil: u.loginLockedUntil || null,
           createdAt: u.createdAt || null,
         };
       })
@@ -308,7 +319,15 @@ function writeUsers(users) {
           role,
           stripeSessionId: u.stripeSessionId || null,
           stripeCustomerId: u.stripeCustomerId || null,
+          stripeSubscriptionId: u.stripeSubscriptionId || null,
+          subscriptionStatus: u.subscriptionStatus || null,
+          subscriptionEndsAt: u.subscriptionEndsAt || null,
           paidAt: u.paidAt || null,
+          accessBlocked: Boolean(u.accessBlocked),
+          accessBlockedReason: u.accessBlockedReason || null,
+          accessBlockedAt: u.accessBlockedAt || null,
+          failedLoginAttempts: Number(u.failedLoginAttempts || 0) || 0,
+          loginLockedUntil: u.loginLockedUntil || null,
           createdAt: u.createdAt || null,
         };
       })
@@ -430,6 +449,16 @@ function evaluateUserAccess(user) {
     };
   }
 
+  if (user.accessBlocked) {
+    return {
+      accessAllowed: false,
+      reason: user.accessBlockedReason || "account bloccato: abbonamento non attivo",
+      plan,
+      role,
+      blocked: true,
+    };
+  }
+
   if (!REQUIRE_PAYMENT) {
     return {
       accessAllowed: true,
@@ -443,12 +472,37 @@ function evaluateUserAccess(user) {
     return { accessAllowed: false, reason: "piano non valido", plan, role };
   }
 
-  // Accesso desk: serve evidenza di pagamento (paidAt / Stripe ids).
+  // Lifetime one-shot: basta prova pagamento.
+  if (plan === "lifetime") {
+    const hasPaymentProof = Boolean(user.paidAt || user.stripeCustomerId || user.stripeSessionId);
+    if (hasPaymentProof) {
+      return { accessAllowed: true, reason: "lifetime attivo", plan, role };
+    }
+    return {
+      accessAllowed: false,
+      reason: "pagamento richiesto per accedere al desk",
+      plan,
+      role,
+    };
+  }
+
+  // Piani ricorrenti: serve abbonamento active/trialing.
+  const status = String(user.subscriptionStatus || "").toLowerCase();
+  if (status && !ACTIVE_SUBSCRIPTION_STATUSES.has(status)) {
+    return {
+      accessAllowed: false,
+      reason: "abbonamento scaduto o non rinnovato: rinnova da Piani o dal portale billing",
+      plan,
+      role,
+      blocked: true,
+    };
+  }
+
   const hasPaymentProof = Boolean(user.paidAt || user.stripeCustomerId || user.stripeSessionId);
   if (hasPaymentProof) {
     return {
       accessAllowed: true,
-      reason: "abbonamento attivo",
+      reason: status ? `abbonamento ${status}` : "abbonamento attivo",
       plan,
       role,
     };
@@ -460,6 +514,157 @@ function evaluateUserAccess(user) {
     plan,
     role,
   };
+}
+
+function findUserByEmailOrCustomer(users, { email, customerId, subscriptionId } = {}) {
+  const normalizedEmail = normalizeEmail(email || "");
+  const customer = customerId ? String(customerId) : "";
+  const subId = subscriptionId ? String(subscriptionId) : "";
+  return (
+    users.find((u) => {
+      if (normalizedEmail && normalizeEmail(u.email) === normalizedEmail) return true;
+      if (customer && String(u.stripeCustomerId || "") === customer) return true;
+      if (subId && String(u.stripeSubscriptionId || "") === subId) return true;
+      return false;
+    }) || null
+  );
+}
+
+function revokeSessionsForUser(userId) {
+  const id = String(userId || "").toLowerCase();
+  if (!id) return;
+  let changed = false;
+  for (const [token, session] of sessions.entries()) {
+    if (String(session?.userId || "").toLowerCase() === id) {
+      sessions.delete(token);
+      changed = true;
+    }
+  }
+  if (changed) persistSessionsNow();
+}
+
+function blockUserAccess(user, reason) {
+  if (!user) return false;
+  user.accessBlocked = true;
+  user.accessBlockedReason = reason || "account bloccato: abbonamento non attivo";
+  user.accessBlockedAt = new Date().toISOString();
+  revokeSessionsForUser(user.username);
+  return true;
+}
+
+function unblockUserAccess(user) {
+  if (!user) return false;
+  user.accessBlocked = false;
+  user.accessBlockedReason = null;
+  user.accessBlockedAt = null;
+  return true;
+}
+
+function applySubscriptionState(user, { status, subscriptionId, customerId, currentPeriodEnd } = {}) {
+  if (!user) return false;
+  let changed = false;
+  const normalizedStatus = status ? String(status).toLowerCase() : null;
+  if (subscriptionId && user.stripeSubscriptionId !== subscriptionId) {
+    user.stripeSubscriptionId = String(subscriptionId);
+    changed = true;
+  }
+  if (customerId && user.stripeCustomerId !== String(customerId)) {
+    user.stripeCustomerId = String(customerId);
+    changed = true;
+  }
+  if (normalizedStatus && user.subscriptionStatus !== normalizedStatus) {
+    user.subscriptionStatus = normalizedStatus;
+    changed = true;
+  }
+  if (currentPeriodEnd) {
+    const iso =
+      typeof currentPeriodEnd === "number"
+        ? new Date(currentPeriodEnd * 1000).toISOString()
+        : String(currentPeriodEnd);
+    if (user.subscriptionEndsAt !== iso) {
+      user.subscriptionEndsAt = iso;
+      changed = true;
+    }
+  }
+
+  if (normalizedStatus && ACTIVE_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
+    if (user.accessBlocked) {
+      unblockUserAccess(user);
+      changed = true;
+    }
+    if (!user.paidAt) {
+      user.paidAt = new Date().toISOString();
+      changed = true;
+    }
+  } else if (normalizedStatus) {
+    blockUserAccess(user, "abbonamento scaduto o non rinnovato");
+    changed = true;
+  }
+  return changed;
+}
+
+function getLoginLockState(user) {
+  if (!user?.loginLockedUntil) {
+    return { locked: false, remainingMs: 0, attempts: Number(user?.failedLoginAttempts || 0) || 0 };
+  }
+  const until = Date.parse(user.loginLockedUntil);
+  if (!Number.isFinite(until)) {
+    return { locked: false, remainingMs: 0, attempts: Number(user?.failedLoginAttempts || 0) || 0 };
+  }
+  const remainingMs = until - Date.now();
+  if (remainingMs <= 0) {
+    return { locked: false, remainingMs: 0, attempts: Number(user?.failedLoginAttempts || 0) || 0, expired: true };
+  }
+  return {
+    locked: true,
+    remainingMs,
+    attempts: Number(user.failedLoginAttempts || 0) || 0,
+    until: user.loginLockedUntil,
+  };
+}
+
+function clearLoginFailures(user) {
+  if (!user) return false;
+  let changed = false;
+  if (user.failedLoginAttempts) {
+    user.failedLoginAttempts = 0;
+    changed = true;
+  }
+  if (user.loginLockedUntil) {
+    user.loginLockedUntil = null;
+    changed = true;
+  }
+  return changed;
+}
+
+function registerFailedLogin(user) {
+  if (!user) return { locked: false, attempts: 0, remainingAttempts: MAX_FAILED_LOGIN_ATTEMPTS };
+  const lock = getLoginLockState(user);
+  if (lock.expired) {
+    user.failedLoginAttempts = 0;
+    user.loginLockedUntil = null;
+  }
+  user.failedLoginAttempts = (Number(user.failedLoginAttempts || 0) || 0) + 1;
+  const attempts = user.failedLoginAttempts;
+  if (attempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+    user.loginLockedUntil = new Date(Date.now() + LOGIN_LOCK_MS).toISOString();
+    return {
+      locked: true,
+      attempts,
+      remainingAttempts: 0,
+      lockedUntil: user.loginLockedUntil,
+      remainingMs: LOGIN_LOCK_MS,
+    };
+  }
+  return {
+    locked: false,
+    attempts,
+    remainingAttempts: Math.max(0, MAX_FAILED_LOGIN_ATTEMPTS - attempts),
+  };
+}
+
+function formatLockMinutes(remainingMs) {
+  return Math.max(1, Math.ceil(Number(remainingMs || 0) / 60000));
 }
 
 function getUserFromSession(session) {
@@ -504,6 +709,8 @@ function publicUserPayload(user, access = null) {
     role: evaluated.role,
     accessAllowed: evaluated.accessAllowed,
     accessReason: evaluated.reason,
+    subscriptionStatus: user?.subscriptionStatus || null,
+    accessBlocked: Boolean(user?.accessBlocked),
   };
 }
 
@@ -674,10 +881,58 @@ async function verifyCheckoutSession(sessionId) {
     id: session.id,
     email: normalizeEmail(session.customer_details?.email || session.customer_email || ""),
     plan,
-    customerId: session.customer || null,
+    customerId: typeof session.customer === "string" ? session.customer : session.customer?.id || null,
+    subscriptionId:
+      typeof session.subscription === "string"
+        ? session.subscription
+        : session.subscription?.id || null,
     mode: session.mode,
     paymentStatus: session.payment_status,
   };
+}
+
+async function fetchStripeSubscription(subscriptionId) {
+  const stripe = getStripe();
+  if (!stripe || !subscriptionId) return null;
+  try {
+    return await stripe.subscriptions.retrieve(String(subscriptionId));
+  } catch {
+    return null;
+  }
+}
+
+async function syncUserSubscriptionFromStripe(user) {
+  if (!user || user.role === "admin" || isAdminEmail(user.email)) return false;
+  if (String(user.plan || "").toLowerCase() === "lifetime") return false;
+  const stripe = getStripe();
+  if (!stripe) return false;
+
+  let subscription = null;
+  if (user.stripeSubscriptionId) {
+    subscription = await fetchStripeSubscription(user.stripeSubscriptionId);
+  }
+  if (!subscription && user.stripeCustomerId) {
+    try {
+      const list = await stripe.subscriptions.list({
+        customer: String(user.stripeCustomerId),
+        status: "all",
+        limit: 5,
+      });
+      subscription =
+        (list.data || []).find((s) => ACTIVE_SUBSCRIPTION_STATUSES.has(String(s.status || ""))) ||
+        (list.data || [])[0] ||
+        null;
+    } catch {
+      subscription = null;
+    }
+  }
+  if (!subscription) return false;
+  return applySubscriptionState(user, {
+    status: subscription.status,
+    subscriptionId: subscription.id,
+    customerId: typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id,
+    currentPeriodEnd: subscription.current_period_end,
+  });
 }
 
 function getPriceCacheFile(assetId) {
@@ -1880,18 +2135,91 @@ const server = http.createServer(async (req, res) => {
       const rawBody = await readRawBody(req);
       const signature = String(req.headers["stripe-signature"] || "");
       const event = stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET);
+      const users = readUsers();
+      let usersChanged = false;
+
       if (event.type === "checkout.session.completed") {
         const session = event.data.object;
         const plan = String(session?.metadata?.plan || "mensile").toLowerCase();
         const email = normalizeEmail(session?.customer_details?.email || session?.customer_email || "");
         const sessionId = String(session?.id || "");
+        const customerId =
+          typeof session?.customer === "string" ? session.customer : session?.customer?.id || null;
+        const subscriptionId =
+          typeof session?.subscription === "string"
+            ? session.subscription
+            : session?.subscription?.id || null;
+
         await sendPurchaseFollowUpEmail({
           email,
           planId: plan,
           sessionId,
           baseUrl: APP_BASE_URL || resolveAppBaseUrl(req),
         });
+
+        const existing = findUserByEmailOrCustomer(users, { email, customerId, subscriptionId });
+        if (existing) {
+          if (plan && PLAN_CATALOG[plan]) existing.plan = plan;
+          if (customerId) existing.stripeCustomerId = customerId;
+          if (sessionId) existing.stripeSessionId = sessionId;
+          if (!existing.paidAt) existing.paidAt = new Date().toISOString();
+          if (subscriptionId) {
+            const sub = await fetchStripeSubscription(subscriptionId);
+            applySubscriptionState(existing, {
+              status: sub?.status || "active",
+              subscriptionId,
+              customerId,
+              currentPeriodEnd: sub?.current_period_end,
+            });
+          } else if (plan === "lifetime") {
+            unblockUserAccess(existing);
+            existing.subscriptionStatus = "lifetime";
+          }
+          usersChanged = true;
+        }
       }
+
+      if (
+        event.type === "customer.subscription.updated" ||
+        event.type === "customer.subscription.deleted"
+      ) {
+        const sub = event.data.object;
+        const customerId = typeof sub?.customer === "string" ? sub.customer : sub?.customer?.id || null;
+        const subscriptionId = String(sub?.id || "");
+        const status =
+          event.type === "customer.subscription.deleted" ? "canceled" : String(sub?.status || "canceled");
+        const user = findUserByEmailOrCustomer(users, { customerId, subscriptionId });
+        if (user) {
+          applySubscriptionState(user, {
+            status,
+            subscriptionId,
+            customerId,
+            currentPeriodEnd: sub?.current_period_end,
+          });
+          usersChanged = true;
+        }
+      }
+
+      if (event.type === "invoice.payment_failed") {
+        const invoice = event.data.object;
+        const customerId =
+          typeof invoice?.customer === "string" ? invoice.customer : invoice?.customer?.id || null;
+        const subscriptionId =
+          typeof invoice?.subscription === "string"
+            ? invoice.subscription
+            : invoice?.subscription?.id || null;
+        const user = findUserByEmailOrCustomer(users, { customerId, subscriptionId });
+        if (user && String(user.plan || "").toLowerCase() !== "lifetime") {
+          applySubscriptionState(user, {
+            status: "past_due",
+            subscriptionId: subscriptionId || user.stripeSubscriptionId,
+            customerId: customerId || user.stripeCustomerId,
+          });
+          usersChanged = true;
+        }
+      }
+
+      if (usersChanged) writeUsers(users);
       return json(res, 200, { ok: true, received: true });
     } catch (error) {
       console.warn("[stripe webhook]", error?.message || error);
@@ -1992,25 +2320,83 @@ const server = http.createServer(async (req, res) => {
       }
       const users = readUsers();
       const found = users.find((u) => u.email === loginId || u.username === loginId);
+
+      if (found) {
+        let lock = getLoginLockState(found);
+        if (lock.expired) {
+          clearLoginFailures(found);
+          writeUsers(users);
+          lock = getLoginLockState(found);
+        }
+        if (lock.locked) {
+          return json(res, 423, {
+            ok: false,
+            error: `Account bloccato per troppi tentativi. Riprova tra ${formatLockMinutes(lock.remainingMs)} minuti.`,
+            locked: true,
+            lockedUntil: found.loginLockedUntil,
+            remainingMinutes: formatLockMinutes(lock.remainingMs),
+          });
+        }
+      }
+
       if (!found || !verifyPassword(password, found.passwordHash)) {
+        if (found) {
+          const fail = registerFailedLogin(found);
+          writeUsers(users);
+          if (fail.locked) {
+            return json(res, 423, {
+              ok: false,
+              error: `Account bloccato dopo ${MAX_FAILED_LOGIN_ATTEMPTS} tentativi falliti. Riprova tra ${formatLockMinutes(fail.remainingMs)} minuti.`,
+              locked: true,
+              lockedUntil: fail.lockedUntil,
+              remainingMinutes: formatLockMinutes(fail.remainingMs),
+            });
+          }
+          return json(res, 401, {
+            ok: false,
+            error: `credenziali non valide (${fail.remainingAttempts} tentativi rimasti)`,
+            remainingAttempts: fail.remainingAttempts,
+          });
+        }
         return json(res, 401, { ok: false, error: "credenziali non valide" });
       }
+
+      // Login ok: reset lock/tentativi.
+      let usersChanged = clearLoginFailures(found);
+
       // Se l'utente entra con email admin whitelist, forza privilegi anche se il record e incompleto.
       if (isAdminEmail(loginId) || isAdminEmail(found.email)) {
         found.email = found.email || loginId;
         found.role = "admin";
         found.plan = "lifetime";
         if (!found.paidAt) found.paidAt = new Date().toISOString();
+        unblockUserAccess(found);
+        usersChanged = true;
       }
-      let usersChanged = ensureAdminPrivileges(found);
+      if (ensureAdminPrivileges(found)) usersChanged = true;
       if (isLegacyPasswordHash(found.passwordHash)) {
         found.passwordHash = hashPassword(password);
         usersChanged = true;
       }
-      if (usersChanged || isAdminEmail(loginId) || isAdminEmail(found.email)) {
-        writeUsers(users);
+
+      try {
+        if (await syncUserSubscriptionFromStripe(found)) usersChanged = true;
+      } catch {
+        // ignore sync errors at login
       }
+
+      if (usersChanged) writeUsers(users);
+
       const access = evaluateUserAccess(found);
+      if (!access.accessAllowed) {
+        return json(res, 403, {
+          ok: false,
+          error: access.reason || "accesso non autorizzato",
+          accessAllowed: false,
+          user: publicUserPayload(found, access),
+        });
+      }
+
       const token = crypto.randomBytes(24).toString("hex");
       const expiresAt = Date.now() + SESSION_TTL_MS;
       setSession(token, {
@@ -2022,7 +2408,7 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         token,
         expiresAt: new Date(expiresAt).toISOString(),
-        accessAllowed: access.accessAllowed,
+        accessAllowed: true,
         user: publicUserPayload(found, access),
       });
     } catch (error) {
@@ -2048,6 +2434,9 @@ const server = http.createServer(async (req, res) => {
       let stripeCustomerId = null;
       let paidAt = null;
       let stripeSessionId = null;
+      let stripeSubscriptionId = null;
+      let subscriptionStatus = null;
+      let subscriptionEndsAt = null;
       let role = "user";
 
       if (!email || !email.includes("@")) {
@@ -2059,6 +2448,7 @@ const server = http.createServer(async (req, res) => {
         normalizedPlan = "lifetime";
         role = "admin";
         paidAt = new Date().toISOString();
+        subscriptionStatus = "lifetime";
       } else if (REQUIRE_PAYMENT) {
         if (!sessionId) {
           return json(res, 402, { ok: false, error: "pagamento richiesto: completa il checkout prima della registrazione" });
@@ -2075,6 +2465,18 @@ const server = http.createServer(async (req, res) => {
         stripeCustomerId = verified.customerId;
         paidAt = new Date().toISOString();
         stripeSessionId = verified.id;
+        stripeSubscriptionId = verified.subscriptionId || null;
+        if (normalizedPlan === "lifetime") {
+          subscriptionStatus = "lifetime";
+        } else if (stripeSubscriptionId) {
+          const sub = await fetchStripeSubscription(stripeSubscriptionId);
+          subscriptionStatus = String(sub?.status || "active").toLowerCase();
+          subscriptionEndsAt = sub?.current_period_end
+            ? new Date(sub.current_period_end * 1000).toISOString()
+            : null;
+        } else {
+          subscriptionStatus = "active";
+        }
       }
 
       if (!username || !password) {
@@ -2102,7 +2504,15 @@ const server = http.createServer(async (req, res) => {
         role,
         stripeSessionId,
         stripeCustomerId,
+        stripeSubscriptionId,
+        subscriptionStatus,
+        subscriptionEndsAt,
         paidAt,
+        accessBlocked: false,
+        accessBlockedReason: null,
+        accessBlockedAt: null,
+        failedLoginAttempts: 0,
+        loginLockedUntil: null,
         createdAt: new Date().toISOString(),
       });
       writeUsers(users);
@@ -2153,8 +2563,22 @@ const server = http.createServer(async (req, res) => {
     if (!session) {
       return json(res, 401, { ok: false, error: "sessione non valida", accessAllowed: false });
     }
-    const user = getUserFromSession(session);
+    const users = readUsers();
+    const user = users.find((u) => u.username === session.userId) || null;
+    if (user) {
+      let changed = false;
+      if (ensureAdminPrivileges(user)) changed = true;
+      try {
+        if (await syncUserSubscriptionFromStripe(user)) changed = true;
+      } catch {
+        // ignore
+      }
+      if (changed) writeUsers(users);
+    }
     const access = evaluateUserAccess(user);
+    if (user && !access.accessAllowed) {
+      revokeSessionsForUser(user.username);
+    }
     return json(res, 200, {
       ok: true,
       accessAllowed: access.accessAllowed,

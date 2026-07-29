@@ -70,10 +70,32 @@ async function doLogin() {
   }
   setStatus("Login in corso...");
   try {
-    const payload = await apiJson("/api/auth/login", {
+    const response = await fetch("/api/auth/login", {
       method: "POST",
-      body: { email, password },
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
     });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status === 423 || payload?.locked) {
+        setStatus(payload?.error || "Account bloccato per troppi tentativi.", "down");
+        return;
+      }
+      if (response.status === 403) {
+        setStatus(payload?.error || "Abbonamento non attivo. Reindirizzo ai piani...", "down");
+        window.location.href = "/prezzi";
+        return;
+      }
+      if (typeof payload?.remainingAttempts === "number") {
+        setStatus(
+          payload.error || `Credenziali non valide (${payload.remainingAttempts} tentativi rimasti)`,
+          "down"
+        );
+        return;
+      }
+      throw new Error(payload?.error || `HTTP ${response.status}`);
+    }
+    if (!payload?.token) throw new Error("token mancante");
     saveAuthToken(payload.token);
     if (payload.accessAllowed === false || payload.user?.accessAllowed === false) {
       setStatus("Account senza abbonamento attivo. Reindirizzo ai piani...", "down");
@@ -85,7 +107,7 @@ async function doLogin() {
   } catch (error) {
     const msg = String(error.message || "");
     if (/credenziali|non valide|401/i.test(msg)) {
-      setStatus("Credenziali non valide. Se sei admin e non hai ancora un account: vai su Registrati (senza pagare).", "down");
+      setStatus(msg, "down");
     } else {
       setStatus(`Login fallito: ${error.message}`, "down");
     }
