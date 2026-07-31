@@ -4108,45 +4108,62 @@ function upsertCategoryChart(stateKey, canvasId, label, color, categorySeries, m
   bindLeftMousePan(canvas, () => state[stateKey]);
 }
 
-function upsertSupremeCotChart(filteredCot, selectedCategory = "nonCommercial") {
+function upsertSupremeCotChart(filteredCot) {
   if (!state.chartingAvailable || typeof Chart === "undefined") return;
   const canvas = document.getElementById("cotFocusChart");
   if (!canvas) return;
-  const labels = filteredCot.map((r) => r.date.toISOString().slice(0, 10));
-  const map = {
-    commercial: { label: "Commercials", color: "#3d7cff", getter: (r) => r.commercialNet },
-    nonCommercial: { label: "Non-Commercials", color: "#ff4f64", getter: (r) => r.nonCommercialNet },
-    retail: { label: "Retail Traders", color: "#4bc87a", getter: (r) => r.retailNet },
-  };
-  const selected = map[selectedCategory] || map.nonCommercial;
-  const series = filteredCot.map((r) => selected.getter(r));
-  const zeroLine = series.map(() => 0);
+  const rows = Array.isArray(filteredCot) ? filteredCot : [];
+  if (rows.length < 2) return;
+
+  const labels = rows.map((r) => r.date.toISOString().slice(0, 10));
+  const seriesDefs = [
+    { key: "commercial", label: "Commercials", color: "#2962ff", data: rows.map((r) => r.commercialNet) },
+    { key: "nonCommercial", label: "Non-Commercials", color: "#f23645", data: rows.map((r) => r.nonCommercialNet) },
+    { key: "retail", label: "Retail Traders", color: "#089981", data: rows.map((r) => r.retailNet) },
+  ];
+  const zeroLine = rows.map(() => 0);
+
   const rightSideLabelPlugin = {
-    id: "supremeRightSideLabelSingle",
+    id: "supremeRightSideLabels",
     afterDatasetsDraw(chart) {
       const { ctx, chartArea } = chart;
-      const last = series[series.length - 1];
-      if (!Number.isFinite(last)) return;
       const yScale = chart.scales?.y;
-      if (!yScale) return;
-      const yRaw = yScale.getPixelForValue(last);
-      const y = Math.max(chartArea.top + 10, Math.min(chartArea.bottom - 10, yRaw));
-      const x = chartArea.right + 8;
-      const txt = `${selected.label}: ${last >= 0 ? "+" : ""}${fmtInt(last)}`;
-      ctx.save();
-      ctx.font = "12px Inter, Segoe UI, Arial";
-      ctx.textBaseline = "middle";
-      const w = ctx.measureText(txt).width + 10;
-      ctx.fillStyle = "rgba(9,12,16,0.92)";
-      ctx.strokeStyle = selected.color;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(x - 4, y - 8, w, 16, 5);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = selected.color;
-      ctx.fillText(txt, x + 1, y);
-      ctx.restore();
+      if (!yScale || !chartArea) return;
+      const placed = [];
+      const minGap = 16;
+      seriesDefs.forEach((def) => {
+        const last = def.data[def.data.length - 1];
+        if (!Number.isFinite(last)) return;
+        let y = yScale.getPixelForValue(last);
+        y = Math.max(chartArea.top + 10, Math.min(chartArea.bottom - 10, y));
+        // Evita overlap delle etichette finali.
+        for (let guard = 0; guard < 8; guard += 1) {
+          const clash = placed.some((py) => Math.abs(py - y) < minGap);
+          if (!clash) break;
+          y = Math.min(chartArea.bottom - 10, y + minGap);
+        }
+        placed.push(y);
+        const x = chartArea.right + 8;
+        const txt = def.label;
+        ctx.save();
+        ctx.font = "600 11px IBM Plex Sans, Segoe UI, sans-serif";
+        ctx.textBaseline = "middle";
+        const w = ctx.measureText(txt).width + 12;
+        ctx.fillStyle = "rgba(14,17,22,0.94)";
+        ctx.strokeStyle = def.color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(x - 4, y - 9, w, 18, 4);
+        } else {
+          ctx.rect(x - 4, y - 9, w, 18);
+        }
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = def.color;
+        ctx.fillText(txt, x + 2, y);
+        ctx.restore();
+      });
     },
   };
 
@@ -4156,25 +4173,29 @@ function upsertSupremeCotChart(filteredCot, selectedCategory = "nonCommercial") 
     data: {
       labels,
       datasets: [
-        {
+        ...seriesDefs.map((def) => ({
           type: "line",
-          label: selected.label,
-          data: series,
-          borderColor: selected.color,
+          label: def.label,
+          data: def.data,
+          borderColor: def.color,
+          backgroundColor: "transparent",
           borderWidth: 2,
           pointRadius: 0,
+          pointHoverRadius: 3,
           fill: false,
-          tension: 0,
-          stepped: true,
+          // Fluidita stile weekly TradingView (no stepline).
+          tension: 0.28,
+          stepped: false,
+          cubicInterpolationMode: "monotone",
           clip: false,
-        },
+        })),
         {
           type: "line",
           label: "Zero",
           data: zeroLine,
-          borderColor: "rgba(20,20,20,0.85)",
-          borderWidth: 1.2,
-          borderDash: [4, 4],
+          borderColor: "rgba(139,148,158,0.9)",
+          borderWidth: 1.1,
+          borderDash: [3, 4],
           pointRadius: 0,
           fill: false,
           tension: 0,
@@ -4185,16 +4206,24 @@ function upsertSupremeCotChart(filteredCot, selectedCategory = "nonCommercial") 
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { right: 118 } },
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { labels: { color: "#ecf5ff", boxWidth: 10 } },
+        legend: {
+          display: true,
+          labels: {
+            color: "#d1d4dc",
+            boxWidth: 10,
+            filter: (item) => item.text !== "Zero",
+          },
+        },
         tooltip: {
           callbacks: {
             label: (ctx) => {
-              if (ctx.dataset.label === "Zero") return `${ctx.dataset.label}: ${fmtInt(ctx.raw)}`;
-              const row = filteredCot[ctx.dataIndex];
+              if (ctx.dataset.label === "Zero") return "Zero";
+              const row = rows[ctx.dataIndex];
               if (!row) return `${ctx.dataset.label}: ${fmtInt(ctx.raw)}`;
-              return `${ctx.dataset.label}: ${fmtInt(ctx.raw)} | OI: ${fmtInt(row.oi)} | ${row.date.toISOString().slice(0, 10)}`;
+              return `${ctx.dataset.label}: ${fmtInt(ctx.raw)} | OI: ${fmtInt(row.oi)}`;
             },
           },
         },
@@ -4212,10 +4241,24 @@ function upsertSupremeCotChart(filteredCot, selectedCategory = "nonCommercial") 
         },
       },
       scales: {
-        x: { ticks: { color: "#9fb8cc" }, grid: { color: "rgba(61,102,139,0.28)" } },
+        x: {
+          ticks: {
+            color: "#9aa4b2",
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 10,
+          },
+          grid: { color: "rgba(31,42,55,0.9)" },
+        },
         y: {
-          ticks: { color: "#9fb8cc", callback: (v) => fmtInt(v) },
-          grid: { color: "rgba(61,102,139,0.28)" },
+          title: {
+            display: true,
+            text: "Net positions (contracts)",
+            color: "#9aa4b2",
+            font: { size: 11 },
+          },
+          ticks: { color: "#9aa4b2", callback: (v) => fmtInt(v) },
+          grid: { color: "rgba(31,42,55,0.9)" },
         },
       },
     },
@@ -4224,10 +4267,26 @@ function upsertSupremeCotChart(filteredCot, selectedCategory = "nonCommercial") 
   bindLeftMousePan(canvas, () => state.cotFocusedChart);
 }
 
+function syncCotFocusControlsUi() {
+  const isSupremeNet = state.cotMetric === "tvLegacyNet";
+  const categoryWrap = document.getElementById("cotCategoryWrap");
+  const lookbackWrap = cotLookbackEl?.closest?.(".cot-focus-selectors");
+  if (categoryWrap) categoryWrap.hidden = isSupremeNet;
+  if (lookbackWrap) lookbackWrap.hidden = isSupremeNet;
+  const hint = document.getElementById("cotFocusHint");
+  if (hint) {
+    hint.textContent = isSupremeNet
+      ? "Supreme COT: Commercial / Non-Commercial / Retail net (weekly fluido). Linea zero = equilibrio."
+      : "Posizioni nette Commercial / Non-Commercial / Retail. Linea zero = equilibrio.";
+  }
+}
+
 function updateFocusedCotChart(filteredCot) {
+  syncCotFocusControlsUi();
   if (state.cotMetric === "tvLegacyNet") {
     const fullCot = Array.isArray(state.cotData) && state.cotData.length ? state.cotData : filteredCot;
-    upsertSupremeCotChart(fullCot, state.cotChartCategory);
+    // Stesso pane del Pine Supreme COT: 3 net weekly fluidi + zero line.
+    upsertSupremeCotChart(fullCot);
     return;
   }
   const map = {

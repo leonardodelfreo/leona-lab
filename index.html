@@ -119,9 +119,9 @@
               <div class="cot-focus-controls">
                 <div>
                   <h2>COT Focus</h2>
-                  <small class="muted">Posizioni nette Commercial / Non-Commercial / Retail. Linea zero = equilibrio.</small>
+                  <small id="cotFocusHint" class="muted">Supreme COT: Commercial / Non-Commercial / Retail net (weekly fluido). Linea zero = equilibrio.</small>
                 </div>
-                <div class="cot-focus-selectors">
+                <div class="cot-focus-selectors" id="cotCategoryWrap">
                   <label for="cotCategory">Categoria</label>
                   <select id="cotCategory">
                     <option value="commercial">Commercial</option>
@@ -132,7 +132,7 @@
                 <div class="cot-focus-selectors">
                   <label for="cotMetric">Metrica</label>
                   <select id="cotMetric">
-                    <option value="tvLegacyNet" selected>Net style TV (legacy)</option>
+                    <option value="tvLegacyNet" selected>Net style TV (Supreme)</option>
                     <option value="netPctOi">Net %OI</option>
                     <option value="cotIndex">COT Index (0-100)</option>
                   </select>
@@ -601,6 +601,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260731-cot-unavailable-01"></script>
+    <script src="./app.js?v=20260731-supreme-cot-lines-01"></script>
   </body>
 </html>
