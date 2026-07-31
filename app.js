@@ -4518,23 +4518,23 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
         },
         scales: {
           x: {
+            type: "category",
             ticks: {
               color: "#9fb8cc",
+              // Non filtrare con callback che torna "": Chart.js ricade sull'indice numerico.
               autoSkip: true,
-              maxTicksLimit: 18,
+              autoSkipPadding: 10,
+              maxTicksLimit: 14,
               maxRotation: 0,
               minRotation: 0,
-              callback(value, index) {
-                const label = String(lineLabels[index] || "");
-                if (!label) return "";
-                const parts = label.split(" ");
-                const month = parts[0];
-                const dayNum = Number(parts[1]);
-                const prev = index > 0 ? String(lineLabels[index - 1] || "") : "";
-                const prevMonth = prev.split(" ")[0];
-                if (month !== prevMonth) return label;
-                if (Number.isFinite(dayNum) && (dayNum === 1 || dayNum === 10 || dayNum === 20)) return label;
-                return "";
+              callback(value) {
+                const idx = typeof value === "number" ? value : Number(value);
+                const label =
+                  (Number.isFinite(idx) ? lineLabels[idx] : null) ||
+                  this.getLabelForValue(value);
+                // Mostra solo etichette calendario (Gen 15); mai l'indice grezzo.
+                if (!label || /^\d+$/.test(String(label))) return null;
+                return String(label);
               },
             },
             grid: { color: "rgba(61,102,139,0.22)" },
