@@ -2382,6 +2382,7 @@ function buildSeasonalityPathSeries(prices, yearsSetting) {
   const empty = {
     labels: [],
     dayKeys: [],
+    calendarKeys: [],
     avgPath: [],
     medianPath: [],
     lowPath: [],
@@ -2462,24 +2463,22 @@ function buildSeasonalityPathSeries(prices, yearsSetting) {
   const avgDaily = [];
   const labels = [];
   const dayKeys = [];
-  let lastMonthLabel = "";
+  const calendarKeys = [];
   for (let i = 0; i <= maxIdx; i += 1) {
     avgDaily.push(sumByDay[i] / lookbackYears);
     dayKeys.push(String(i + 1));
     const sampleDates = datesByDay[i];
     if (sampleDates.length) {
-      const mid = sampleDates[Math.floor(sampleDates.length / 2)];
+      // Data "tipica" di quel trading-day: mediana delle date storiche campionate.
+      const sortedDates = sampleDates.slice().sort((a, b) => a - b);
+      const mid = sortedDates[Math.floor(sortedDates.length / 2)];
       const monthLbl = MONTH_LABELS[mid.getUTCMonth()];
       const dayNum = mid.getUTCDate();
-      // Etichetta leggibile: mostra mese quando cambia, altrimenti giorno trading.
-      if (monthLbl !== lastMonthLabel && dayNum <= 5) {
-        labels.push(monthLbl);
-        lastMonthLabel = monthLbl;
-      } else {
-        labels.push(String(i + 1));
-      }
+      labels.push(`${monthLbl} ${dayNum}`);
+      calendarKeys.push(`${String(mid.getUTCMonth() + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`);
     } else {
-      labels.push(String(i + 1));
+      labels.push(`TD ${i + 1}`);
+      calendarKeys.push("");
     }
   }
 
@@ -2504,6 +2503,7 @@ function buildSeasonalityPathSeries(prices, yearsSetting) {
   return {
     labels,
     dayKeys,
+    calendarKeys,
     avgPath,
     medianPath: avgPath.slice(),
     lowPath: avgPath.map(() => 0),
@@ -4490,8 +4490,9 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
             callbacks: {
               title: (items) => {
                 const idx = items?.[0]?.dataIndex;
-                const day = dayKeys[idx] || lineLabels[idx];
-                return `Giorno di trading ${day}`;
+                const cal = lineLabels[idx] || "--";
+                const day = dayKeys[idx] || "--";
+                return `${cal} · giorno di trading ${day}`;
               },
               label: (ctx) => {
                 if (ctx.dataset.label === "Zero") return null;
@@ -4520,9 +4521,21 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
             ticks: {
               color: "#9fb8cc",
               autoSkip: true,
-              maxTicksLimit: 48,
+              maxTicksLimit: 18,
               maxRotation: 0,
               minRotation: 0,
+              callback(value, index) {
+                const label = String(lineLabels[index] || "");
+                if (!label) return "";
+                const parts = label.split(" ");
+                const month = parts[0];
+                const dayNum = Number(parts[1]);
+                const prev = index > 0 ? String(lineLabels[index - 1] || "") : "";
+                const prevMonth = prev.split(" ")[0];
+                if (month !== prevMonth) return label;
+                if (Number.isFinite(dayNum) && (dayNum === 1 || dayNum === 10 || dayNum === 20)) return label;
+                return "";
+              },
             },
             grid: { color: "rgba(61,102,139,0.22)" },
           },
