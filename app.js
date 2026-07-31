@@ -4142,7 +4142,7 @@ function upsampleCotRowsForFluidWeekly(rows, stepsPerSegment = 6) {
   return out;
 }
 
-function upsertSupremeCotChart(filteredCot) {
+function upsertSupremeCotChart(filteredCot, selectedCategory = "nonCommercial") {
   if (!state.chartingAvailable || typeof Chart === "undefined") return;
   const canvas = document.getElementById("cotFocusChart");
   if (!canvas) return;
@@ -4151,10 +4151,17 @@ function upsertSupremeCotChart(filteredCot) {
   const rows = upsampleCotRowsForFluidWeekly(rawRows, 7);
 
   const labels = rows.map((r) => r.date.toISOString().slice(0, 10));
+  const allSeries = {
+    commercial: { key: "commercial", label: "Commercials", color: "#2962ff", getter: (r) => r.commercialNet },
+    nonCommercial: { key: "nonCommercial", label: "Non-Commercials", color: "#f23645", getter: (r) => r.nonCommercialNet },
+    retail: { key: "retail", label: "Retail Traders", color: "#089981", getter: (r) => r.retailNet },
+  };
+  const selected = allSeries[selectedCategory] || allSeries.nonCommercial;
   const seriesDefs = [
-    { key: "commercial", label: "Commercials", color: "#2962ff", data: rows.map((r) => r.commercialNet) },
-    { key: "nonCommercial", label: "Non-Commercials", color: "#f23645", data: rows.map((r) => r.nonCommercialNet) },
-    { key: "retail", label: "Retail Traders", color: "#089981", data: rows.map((r) => r.retailNet) },
+    {
+      ...selected,
+      data: rows.map((r) => selected.getter(r)),
+    },
   ];
   const zeroLine = rows.map(() => 0);
 
@@ -4164,40 +4171,30 @@ function upsertSupremeCotChart(filteredCot) {
       const { ctx, chartArea } = chart;
       const yScale = chart.scales?.y;
       if (!yScale || !chartArea) return;
-      const placed = [];
-      const minGap = 16;
-      seriesDefs.forEach((def) => {
-        const last = def.data[def.data.length - 1];
-        if (!Number.isFinite(last)) return;
-        let y = yScale.getPixelForValue(last);
-        y = Math.max(chartArea.top + 10, Math.min(chartArea.bottom - 10, y));
-        for (let guard = 0; guard < 8; guard += 1) {
-          const clash = placed.some((py) => Math.abs(py - y) < minGap);
-          if (!clash) break;
-          y = Math.min(chartArea.bottom - 10, y + minGap);
-        }
-        placed.push(y);
-        const x = chartArea.right + 8;
-        const txt = def.label;
-        ctx.save();
-        ctx.font = "600 11px IBM Plex Sans, Segoe UI, sans-serif";
-        ctx.textBaseline = "middle";
-        const w = ctx.measureText(txt).width + 12;
-        ctx.fillStyle = "rgba(14,17,22,0.94)";
-        ctx.strokeStyle = def.color;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(x - 4, y - 9, w, 18, 4);
-        } else {
-          ctx.rect(x - 4, y - 9, w, 18);
-        }
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = def.color;
-        ctx.fillText(txt, x + 2, y);
-        ctx.restore();
-      });
+      const def = seriesDefs[0];
+      const last = def?.data?.[def.data.length - 1];
+      if (!Number.isFinite(last)) return;
+      const y = Math.max(chartArea.top + 10, Math.min(chartArea.bottom - 10, yScale.getPixelForValue(last)));
+      const x = chartArea.right + 8;
+      const txt = `${def.label}: ${last >= 0 ? "+" : ""}${fmtInt(last)}`;
+      ctx.save();
+      ctx.font = "600 11px IBM Plex Sans, Segoe UI, sans-serif";
+      ctx.textBaseline = "middle";
+      const w = ctx.measureText(txt).width + 12;
+      ctx.fillStyle = "rgba(14,17,22,0.94)";
+      ctx.strokeStyle = def.color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(x - 4, y - 9, w, 18, 4);
+      } else {
+        ctx.rect(x - 4, y - 9, w, 18);
+      }
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = def.color;
+      ctx.fillText(txt, x + 2, y);
+      ctx.restore();
     },
   };
 
@@ -4221,7 +4218,7 @@ function upsertSupremeCotChart(filteredCot) {
           data: def.data,
           borderColor: def.color,
           backgroundColor: "transparent",
-          borderWidth: 2.2,
+          borderWidth: 2.4,
           pointRadius: 0,
           pointHoverRadius: 3,
           fill: false,
@@ -4246,7 +4243,7 @@ function upsertSupremeCotChart(filteredCot) {
       responsive: true,
       maintainAspectRatio: false,
       animation: { duration: 350 },
-      layout: { padding: { right: 118 } },
+      layout: { padding: { right: 128 } },
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: {
@@ -4315,12 +4312,13 @@ function syncCotFocusControlsUi() {
   const isSupremeNet = state.cotMetric === "tvLegacyNet";
   const categoryWrap = document.getElementById("cotCategoryWrap");
   const lookbackWrap = cotLookbackEl?.closest?.(".cot-focus-selectors");
-  if (categoryWrap) categoryWrap.hidden = isSupremeNet;
+  // In Supreme Net la tendina categoria resta visibile: ogni voce ha il suo grafico.
+  if (categoryWrap) categoryWrap.hidden = false;
   if (lookbackWrap) lookbackWrap.hidden = isSupremeNet;
   const hint = document.getElementById("cotFocusHint");
   if (hint) {
     hint.textContent = isSupremeNet
-      ? "Supreme COT: Commercial / Non-Commercial / Retail net (weekly fluido). Linea zero = equilibrio."
+      ? "Supreme COT weekly fluido: scegli Commercial / Non-Commercial / Retail dalla tendina. Linea zero = equilibrio."
       : "Posizioni nette Commercial / Non-Commercial / Retail. Linea zero = equilibrio.";
   }
 }
@@ -4329,8 +4327,7 @@ function updateFocusedCotChart(filteredCot) {
   syncCotFocusControlsUi();
   if (state.cotMetric === "tvLegacyNet") {
     const fullCot = Array.isArray(state.cotData) && state.cotData.length ? state.cotData : filteredCot;
-    // Stesso pane del Pine Supreme COT: 3 net weekly fluidi + zero line.
-    upsertSupremeCotChart(fullCot);
+    upsertSupremeCotChart(fullCot, state.cotChartCategory || "nonCommercial");
     return;
   }
   const map = {
