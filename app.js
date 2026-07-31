@@ -4108,12 +4108,47 @@ function upsertCategoryChart(stateKey, canvasId, label, color, categorySeries, m
   bindLeftMousePan(canvas, () => state[stateKey]);
 }
 
+function upsampleCotRowsForFluidWeekly(rows, stepsPerSegment = 6) {
+  // I report CFTC sono settimanali: senza upsample Chart.js resta "a scatti".
+  // Interpoliamo linearmente tra un report e il successivo (stile linea weekly TV).
+  const src = (Array.isArray(rows) ? rows : [])
+    .filter((r) => r?.date instanceof Date && !Number.isNaN(r.date.getTime()))
+    .slice()
+    .sort((a, b) => a.date - b.date);
+  if (src.length < 2) return src;
+  const steps = Math.max(2, Math.min(12, Number(stepsPerSegment) || 6));
+  const out = [];
+  for (let i = 0; i < src.length - 1; i += 1) {
+    const a = src[i];
+    const b = src[i + 1];
+    out.push(a);
+    const t0 = a.date.getTime();
+    const t1 = b.date.getTime();
+    if (!(t1 > t0)) continue;
+    for (let s = 1; s < steps; s += 1) {
+      const p = s / steps;
+      const lerp = (x, y) => x + (y - x) * p;
+      out.push({
+        date: new Date(t0 + (t1 - t0) * p),
+        oi: Math.round(lerp(Number(a.oi) || 0, Number(b.oi) || 0)),
+        commercialNet: lerp(Number(a.commercialNet) || 0, Number(b.commercialNet) || 0),
+        nonCommercialNet: lerp(Number(a.nonCommercialNet) || 0, Number(b.nonCommercialNet) || 0),
+        retailNet: lerp(Number(a.retailNet) || 0, Number(b.retailNet) || 0),
+        _interp: true,
+      });
+    }
+  }
+  out.push(src[src.length - 1]);
+  return out;
+}
+
 function upsertSupremeCotChart(filteredCot) {
   if (!state.chartingAvailable || typeof Chart === "undefined") return;
   const canvas = document.getElementById("cotFocusChart");
   if (!canvas) return;
-  const rows = Array.isArray(filteredCot) ? filteredCot : [];
-  if (rows.length < 2) return;
+  const rawRows = Array.isArray(filteredCot) ? filteredCot : [];
+  if (rawRows.length < 2) return;
+  const rows = upsampleCotRowsForFluidWeekly(rawRows, 7);
 
   const labels = rows.map((r) => r.date.toISOString().slice(0, 10));
   const seriesDefs = [
@@ -4136,7 +4171,6 @@ function upsertSupremeCotChart(filteredCot) {
         if (!Number.isFinite(last)) return;
         let y = yScale.getPixelForValue(last);
         y = Math.max(chartArea.top + 10, Math.min(chartArea.bottom - 10, y));
-        // Evita overlap delle etichette finali.
         for (let guard = 0; guard < 8; guard += 1) {
           const clash = placed.some((py) => Math.abs(py - y) < minGap);
           if (!clash) break;
@@ -4167,30 +4201,36 @@ function upsertSupremeCotChart(filteredCot) {
     },
   };
 
-  if (state.cotFocusedChart) state.cotFocusedChart.destroy();
+  if (state.cotFocusedChart) {
+    try {
+      state.cotFocusedChart.destroy();
+    } catch {
+      // ignore
+    }
+    state.cotFocusedChart = null;
+  }
+
   state.cotFocusedChart = new Chart(canvas, {
+    type: "line",
     plugins: [rightSideLabelPlugin],
     data: {
       labels,
       datasets: [
         ...seriesDefs.map((def) => ({
-          type: "line",
           label: def.label,
           data: def.data,
           borderColor: def.color,
           backgroundColor: "transparent",
-          borderWidth: 2,
+          borderWidth: 2.2,
           pointRadius: 0,
           pointHoverRadius: 3,
           fill: false,
-          // Fluidita stile weekly TradingView (no stepline).
-          tension: 0.28,
-          stepped: false,
-          cubicInterpolationMode: "monotone",
-          clip: false,
+          tension: 0.45,
+          borderJoinStyle: "round",
+          borderCapStyle: "round",
+          spanGaps: false,
         })),
         {
-          type: "line",
           label: "Zero",
           data: zeroLine,
           borderColor: "rgba(139,148,158,0.9)",
@@ -4199,13 +4239,13 @@ function upsertSupremeCotChart(filteredCot) {
           pointRadius: 0,
           fill: false,
           tension: 0,
-          clip: false,
         },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 350 },
       layout: { padding: { right: 118 } },
       interaction: { mode: "index", intersect: false },
       plugins: {
@@ -4218,6 +4258,10 @@ function upsertSupremeCotChart(filteredCot) {
           },
         },
         tooltip: {
+          filter: (item) => {
+            const row = rows[item.dataIndex];
+            return Boolean(row) && !row._interp;
+          },
           callbacks: {
             label: (ctx) => {
               if (ctx.dataset.label === "Zero") return "Zero";
