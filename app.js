@@ -4326,8 +4326,14 @@ function syncCotFocusControlsUi() {
 function updateFocusedCotChart(filteredCot) {
   syncCotFocusControlsUi();
   if (state.cotMetric === "tvLegacyNet") {
-    const fullCot = Array.isArray(state.cotData) && state.cotData.length ? state.cotData : filteredCot;
-    upsertSupremeCotChart(fullCot, state.cotChartCategory || "nonCommercial");
+    // Rispetta la barra timeframe in alto (3M/6M/1Y/...).
+    const cotForChart =
+      Array.isArray(filteredCot) && filteredCot.length >= 2
+        ? filteredCot
+        : Array.isArray(state.cotData) && state.cotData.length
+          ? getFilteredCot(state.cotData, state.timeframe)
+          : filteredCot;
+    upsertSupremeCotChart(cotForChart, state.cotChartCategory || "nonCommercial");
     return;
   }
   const map = {
@@ -5355,11 +5361,12 @@ async function loadDataAndRender(options = {}) {
 
 function setActiveTimeframe(tf) {
   state.timeframe = tf;
-  const buttons = timeframeGroupEl.querySelectorAll(".tf-btn");
+  const buttons = timeframeGroupEl?.querySelectorAll(".tf-btn") || [];
   buttons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tf === tf);
   });
   scheduleRender();
+  savePrefs();
 }
 
 function setActivePage(page) {
