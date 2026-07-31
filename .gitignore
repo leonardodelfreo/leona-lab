@@ -21,3 +21,6 @@ tools/stripe/
 tools/*.png
 tools/*.json
 tools/*.txt
+tools/.rotated-admin-password.txt
+tools/_launch_ops_masked.js
+tools/_launch_configure.js
