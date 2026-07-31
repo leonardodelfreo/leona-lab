@@ -4519,12 +4519,47 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
         scales: {
           x: {
             type: "category",
+            afterBuildTicks(axis) {
+              const labels = lineLabels;
+              const n = labels.length;
+              if (n < 2) return;
+              const selected = new Set([0, n - 1]);
+              // Per ogni mese: primo punto + giorni più vicini a 10 e 20.
+              const byMonth = new Map();
+              for (let i = 0; i < n; i += 1) {
+                const label = String(labels[i] || "");
+                const parts = label.split(" ");
+                const month = parts[0] || "";
+                const dayNum = Number(parts[1]);
+                if (!month || !Number.isFinite(dayNum)) continue;
+                if (!byMonth.has(month)) byMonth.set(month, []);
+                byMonth.get(month).push({ i, dayNum });
+              }
+              byMonth.forEach((rows) => {
+                selected.add(rows[0].i);
+                for (const target of [10, 20]) {
+                  let best = rows[0];
+                  let bestDist = Math.abs(best.dayNum - target);
+                  for (const row of rows) {
+                    const dist = Math.abs(row.dayNum - target);
+                    if (dist < bestDist) {
+                      best = row;
+                      bestDist = dist;
+                    }
+                  }
+                  if (bestDist <= 4) selected.add(best.i);
+                }
+              });
+              let idxs = [...selected].sort((a, b) => a - b);
+              if (idxs.length > 40) {
+                const keepEvery = Math.ceil(idxs.length / 36);
+                idxs = idxs.filter((v, j) => j % keepEvery === 0 || j === idxs.length - 1 || v === 0);
+              }
+              axis.ticks = idxs.map((value) => ({ value }));
+            },
             ticks: {
               color: "#9fb8cc",
-              // Non filtrare con callback che torna "": Chart.js ricade sull'indice numerico.
-              autoSkip: true,
-              autoSkipPadding: 10,
-              maxTicksLimit: 14,
+              autoSkip: false,
               maxRotation: 0,
               minRotation: 0,
               callback(value) {
@@ -4532,7 +4567,6 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
                 const label =
                   (Number.isFinite(idx) ? lineLabels[idx] : null) ||
                   this.getLabelForValue(value);
-                // Mostra solo etichette calendario (Gen 15); mai l'indice grezzo.
                 if (!label || /^\d+$/.test(String(label))) return null;
                 return String(label);
               },
