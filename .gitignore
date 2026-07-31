@@ -13,3 +13,11 @@ data/*
 *.zip
 *.tar.gz
 .cursor/
+
+# Local tooling / secrets — never commit or ship
+tools/users-prod.json
+tools/stripe-login.txt
+tools/stripe/
+tools/*.png
+tools/*.json
+tools/*.txt

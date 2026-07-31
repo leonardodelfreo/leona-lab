@@ -2093,13 +2093,74 @@ function json(res, statusCode, data) {
   res.end(payload);
 }
 
+function isAllowedPublicStatic(relativePath) {
+  const rel = String(relativePath || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .toLowerCase();
+  if (!rel || rel.includes("..") || rel.split("/").some((part) => part.startsWith("."))) {
+    return false;
+  }
+
+  const deniedExact = new Set([
+    "package.json",
+    "package-lock.json",
+    "readme.md",
+    "procfile",
+    "railway.json",
+    ".env",
+    ".env.example",
+  ]);
+  if (deniedExact.has(rel)) return false;
+
+  const deniedPrefixes = [
+    "tools/",
+    "data/",
+    "backend/",
+    "node_modules/",
+    ".git/",
+    ".cursor/",
+    "canvases/",
+    "mcp/",
+  ];
+  if (deniedPrefixes.some((prefix) => rel === prefix.slice(0, -1) || rel.startsWith(prefix))) {
+    return false;
+  }
+
+  const allowedExact = new Set([
+    "landing.html",
+    "login.html",
+    "prezzi.html",
+    "registrati.html",
+    "privacy.html",
+    "termini.html",
+    "index.html",
+    "app.js",
+    "login.js",
+    "landing.js",
+    "registrati.js",
+    "prezzi.js",
+    "styles.css",
+    "robots.txt",
+    "sitemap.xml",
+  ]);
+  if (allowedExact.has(rel)) return true;
+
+  // Solo asset media pubblici.
+  if (rel.startsWith("assets/")) {
+    return /\.(png|jpe?g|webp|gif|svg|ico)$/i.test(rel);
+  }
+
+  return false;
+}
+
 function serveStatic(req, res, pathname) {
   const normalized = pathname === "/" ? "/index.html" : pathname;
   const relative = String(normalized).replace(/^[/\\]+/, "").replace(/\\/g, "/");
-  if (!relative || relative.split("/").includes("..")) {
+  if (!relative || relative.split("/").includes("..") || !isAllowedPublicStatic(relative)) {
     applySecurityHeaders(res);
-    res.writeHead(403);
-    res.end("Forbidden");
+    res.writeHead(404);
+    res.end("Not Found");
     return;
   }
   const rootResolved = path.resolve(ROOT_DIR);
@@ -2129,6 +2190,8 @@ function serveStatic(req, res, pathname) {
       : ext === ".png" ? "image/png"
       : ext === ".jpg" || ext === ".jpeg" ? "image/jpeg"
       : ext === ".webp" ? "image/webp"
+      : ext === ".gif" ? "image/gif"
+      : ext === ".ico" ? "image/x-icon"
       : "application/octet-stream";
     const cacheControl =
       ext === ".html" || ext === ".xml" || ext === ".txt" ? "public, max-age=300"
@@ -2167,52 +2230,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === "/api/health") {
-    const assetId = requestUrl.searchParams.get("asset") || "XAUUSD";
-    const priceCache = readJsonCache(getPriceCacheFile(String(assetId).toUpperCase()), PRICE_CACHE_MAX_AGE_MS);
-    const cotCache = readJsonCache(getCotCacheFile(String(assetId).toUpperCase()), COT_CACHE_MAX_AGE_MS);
-    let userCount = 0;
-    try {
-      userCount = readUsers().length;
-    } catch {
-      userCount = -1;
-    }
     return json(res, 200, {
       ok: true,
-      assetId: String(assetId).toUpperCase(),
-      billing: {
-        stripeConfigured: Boolean(STRIPE_SECRET_KEY),
-        requirePayment: REQUIRE_PAYMENT,
-        webhookConfigured: Boolean(STRIPE_WEBHOOK_SECRET),
-        purchaseEmailConfigured: Boolean(RESEND_API_KEY),
-      },
-      auth: {
-        userCount,
-        adminEmailsConfigured: ADMIN_EMAILS.size,
-        sessionsActive: (() => {
-          loadSessionsFromDisk({ clear: false });
-          return sessions.size;
-        })(),
-      },
-      dataDir: DATA_DIR,
-      macro: {
-        mode: macroState.mode,
-        source: macroState.source,
-        rows: macroState.rows.length,
-        preferredSource: macroState.preferredSource,
-        lastAttemptAt: macroState.lastAttemptAt || null,
-        lastRefreshAt: macroState.lastRefreshAt || null,
-        lastLiveSuccessAt: macroState.lastLiveSuccessAt || null,
-      },
-      price: {
-        cache: Boolean(priceCache?.prices?.length),
-        source: priceCache?.source || "--",
-        fetchedAt: priceCache?.fetchedAt || null,
-      },
-      cot: {
-        cache: Boolean(cotCache?.rows?.length),
-        source: cotCache?.source || "--",
-        fetchedAt: cotCache?.fetchedAt || null,
-      },
+      ts: Date.now(),
     });
   }
 
@@ -2445,11 +2465,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === "/api/auth/admin-check" && req.method === "GET") {
-    const email = normalizeEmail(requestUrl.searchParams.get("email") || "");
-    return json(res, 200, {
-      ok: true,
-      admin: Boolean(email && isAdminEmail(email)),
-    });
+    // Endpoint rimosso: non esporre enumeration admin.
+    return json(res, 404, { ok: false, error: "not found" });
   }
 
   if (pathname === "/api/auth/login" && req.method === "POST") {
@@ -2883,6 +2900,12 @@ bootstrapAuthStore();
 startMacroScheduler();
 server.listen(PORT, HOST, () => {
   console.log(`[server] running on http://${HOST}:${PORT}`);
+  if (STRIPE_SECRET_KEY && !STRIPE_WEBHOOK_SECRET) {
+    console.warn("[server] WARNING: STRIPE_WEBHOOK_SECRET missing — checkout webhooks will fail");
+  }
+  if (STRIPE_SECRET_KEY && !RESEND_API_KEY) {
+    console.warn("[server] WARNING: RESEND_API_KEY missing — purchase emails disabled");
+  }
 });
 
 process.on("SIGTERM", () => {

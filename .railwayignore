@@ -1,0 +1,17 @@
+# Keep deploy payloads free of secrets/tooling and local junk.
+tools/
+data/
+.env
+.env.*
+!.env.example
+node_modules/
+.npm/
+.cursor/
+.vscode/
+.idea/
+*.log
+*.zip
+*.tar.gz
+canvases/
+mcp/
+.git/

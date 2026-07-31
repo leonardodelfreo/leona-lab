@@ -18,7 +18,6 @@ const PLAN_INFO = {
 
 let requirePayment = false;
 let checkoutSessionId = "";
-let adminFreeAccess = false;
 
 function getSelectedPlan() {
   const params = new URLSearchParams(window.location.search);
@@ -138,21 +137,6 @@ async function doRegister() {
   }
 }
 
-async function refreshAdminAccess() {
-  const email = emailEl?.value?.trim() || "";
-  if (!email.includes("@")) {
-    adminFreeAccess = false;
-    return false;
-  }
-  try {
-    const result = await apiJson(`/api/auth/admin-check?email=${encodeURIComponent(email)}`);
-    adminFreeAccess = Boolean(result.admin);
-  } catch {
-    adminFreeAccess = false;
-  }
-  return adminFreeAccess;
-}
-
 async function applyRegisterGate() {
   const selectedPlan = getSelectedPlan();
   const info = PLAN_INFO[selectedPlan];
@@ -165,18 +149,13 @@ async function applyRegisterGate() {
     return;
   }
 
-  await refreshAdminAccess();
-  if (adminFreeAccess) {
-    if (planLabelEl) planLabelEl.textContent = "Admin";
-    if (planPriceEl) planPriceEl.textContent = "Accesso gratuito lifetime";
-    setGate("Account amministratore: registrazione gratuita senza pagamento.", "up");
-    if (submitBtn) submitBtn.disabled = false;
-    return;
-  }
-
   if (!checkoutSessionId) {
-    setGate("Per registrarti paga prima un piano su Piani. (Admin: inserisci la tua email admin)", "down");
-    if (submitBtn) submitBtn.disabled = true;
+    setGate(
+      "Per registrarti completa prima il pagamento su Piani. Se sei gia autorizzato, puoi comunque creare l'account da qui.",
+      "down"
+    );
+    // Il server decide (pagamento verificato oppure email autorizzata). Nessun check admin pubblico.
+    if (submitBtn) submitBtn.disabled = false;
     return;
   }
 
