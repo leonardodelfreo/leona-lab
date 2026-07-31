@@ -1797,6 +1797,16 @@ async function fetchCotRowsReal(asset) {
 
 async function getCotRowsForAsset(assetId) {
   const asset = getAssetById(assetId);
+  const markets = getCotMarketNames(asset);
+  if (!markets.length) {
+    return {
+      ok: false,
+      mode: "DOWN",
+      source: `COT non disponibile per ${asset.id}: nessun futures USA con report CFTC`,
+      rows: [],
+      assetId: asset.id,
+    };
+  }
   try {
     const rows = await fetchCotRowsReal(asset);
     writeJsonCache(getCotCacheFile(asset.id), {

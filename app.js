@@ -2183,6 +2183,32 @@ function getCotMarketNames(asset) {
   return [...new Set(names.map((n) => String(n || "").trim()).filter(Boolean))];
 }
 
+function getCotUnavailableReason(asset = getSelectedAsset()) {
+  if (!asset) return null;
+  if (getCotMarketNames(asset).length) return null;
+  const name = asset.label || asset.id;
+  if (asset.group === "Forex") {
+    return `Per ${name} (${asset.id}) non esiste un report COT della CFTC: questa coppia non ha un futures USA con Commitment of Traders ufficiale e aggiornato.`;
+  }
+  if (asset.group === "Indices") {
+    return `Per ${name} (${asset.id}) non esiste un report COT della CFTC: è un indice fuori dai futures USA coperti dal report (CME/ICE). Il COT ufficiale riguarda i futures americani.`;
+  }
+  return `Per ${name} (${asset.id}) non è disponibile un report COT CFTC ufficiale.`;
+}
+
+function updateCotUnavailablePanel() {
+  const card = document.getElementById("cotUnavailableCard");
+  const textEl = document.getElementById("cotUnavailableText");
+  const metricsEl = document.getElementById("cotMetricsGrid");
+  const mainEl = document.getElementById("cotMainGrid");
+  const reason = getCotUnavailableReason();
+  const show = Boolean(reason);
+  if (card) card.hidden = !show;
+  if (textEl) textEl.textContent = reason || "";
+  if (metricsEl) metricsEl.hidden = show;
+  if (mainEl) mainEl.hidden = show;
+}
+
 function realizedVol(prices, windowDays = 30) {
   const recent = prices.slice(-windowDays - 1);
   const rets = [];
@@ -4633,6 +4659,7 @@ function renderDashboard() {
   const pricesForAnalytics = filteredPrices.length >= 3 ? filteredPrices : (hasPrice ? state.priceData.prices : []);
   const enoughPrice = pricesForAnalytics.length >= 3;
   const enoughCot = filteredCot.length >= 2;
+  updateCotUnavailablePanel();
 
   if (enoughPrice) {
     const last = pricesForAnalytics[pricesForAnalytics.length - 1].close;

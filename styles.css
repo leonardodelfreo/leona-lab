@@ -1093,6 +1093,27 @@ body {
   overflow: hidden;
 }
 
+.cot-unavailable-card {
+  margin-bottom: 14px;
+  padding: 22px 20px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background:
+    linear-gradient(180deg, rgba(212, 175, 55, 0.08), rgba(9, 11, 15, 0.2)),
+    rgba(14, 18, 24, 0.92);
+}
+
+.cot-unavailable-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  color: #e6d7a5;
+}
+
+.cot-unavailable-card p {
+  margin: 0;
+  max-width: 62ch;
+  line-height: 1.45;
+}
+
 .cot-focus-controls {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) repeat(4, minmax(150px, 190px));

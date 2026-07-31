@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Leona.Lab</title>
     <meta name="robots" content="noindex, nofollow" />
-    <link rel="stylesheet" href="./styles.css?v=20260729-macro-auto-actual-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260731-cot-unavailable-01" />
   </head>
   <body>
     <main class="app-shell">
@@ -75,7 +75,12 @@
       </section>
 
       <section id="cotPage" class="page-view active">
-        <section class="grid metrics-grid kpi-strip">
+        <article id="cotUnavailableCard" class="card cot-unavailable-card" hidden>
+          <h2>COT non disponibile</h2>
+          <p id="cotUnavailableText" class="muted"></p>
+        </article>
+
+        <section id="cotMetricsGrid" class="grid metrics-grid kpi-strip">
           <article class="card">
             <h2>COT Regime</h2>
             <p id="cotRegimeValue" class="metric">--</p>
@@ -108,7 +113,7 @@
           </article>
         </section>
 
-        <section class="main-grid">
+        <section id="cotMainGrid" class="main-grid">
           <div class="left-stack">
             <article id="panelCotFocus" class="card chart-panel cot-focus-panel">
               <div class="cot-focus-controls">
@@ -596,6 +601,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260731-cot-markets-01"></script>
+    <script src="./app.js?v=20260731-cot-unavailable-01"></script>
   </body>
 </html>
