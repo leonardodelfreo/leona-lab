@@ -138,40 +138,40 @@ const ASSET_CATALOG = [
   { id: "XAUUSD", label: "Gold Spot", group: "Metals", yahooSymbols: ["XAUUSD=X", "GC=F"], stooqSymbol: "xauusd", tvFeeds: [{ market: "cfd", ticker: "TVC:GOLD" }, { market: "forex", ticker: "OANDA:XAUUSD" }], cotMarket: "GOLD - COMMODITY EXCHANGE INC." },
   { id: "XAGUSD", label: "Silver Spot", group: "Metals", yahooSymbols: ["XAGUSD=X", "SI=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:SILVER" }, { market: "forex", ticker: "OANDA:XAGUSD" }], cotMarket: "SILVER - COMMODITY EXCHANGE INC." },
   { id: "XPTUSD", label: "Platinum Spot", group: "Metals", yahooSymbols: ["PL=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:PLATINUM" }], cotMarket: "PLATINUM - NEW YORK MERCANTILE EXCHANGE" },
-  { id: "DXY", label: "US Dollar Index", group: "Indices", yahooSymbols: ["DX-Y.NYB", "DX=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:DXY" }, { market: "futures", ticker: "ICEUS:DX1!" }], cotMarket: "U.S. DOLLAR INDEX - ICE FUTURES U.S." },
+  { id: "DXY", label: "US Dollar Index", group: "Indices", yahooSymbols: ["DX-Y.NYB", "DX=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:DXY" }, { market: "futures", ticker: "ICEUS:DX1!" }], cotMarket: "USD INDEX - ICE FUTURES U.S.", cotMarkets: ["USD INDEX - ICE FUTURES U.S.", "U.S. DOLLAR INDEX - ICE FUTURES U.S."] },
   { id: "EURUSD", label: "Euro / US Dollar", group: "Forex", yahooSymbols: ["EURUSD=X", "6E=F"], tvFeeds: [{ market: "forex", ticker: "FX:EURUSD" }, { market: "forex", ticker: "OANDA:EURUSD" }], cotMarket: "EURO FX - CHICAGO MERCANTILE EXCHANGE" },
-  { id: "GBPUSD", label: "British Pound / US Dollar", group: "Forex", yahooSymbols: ["GBPUSD=X", "6B=F"], tvFeeds: [{ market: "forex", ticker: "FX:GBPUSD" }, { market: "forex", ticker: "OANDA:GBPUSD" }], cotMarket: "BRITISH POUND STERLING - CHICAGO MERCANTILE EXCHANGE" },
+  { id: "GBPUSD", label: "British Pound / US Dollar", group: "Forex", yahooSymbols: ["GBPUSD=X", "6B=F"], tvFeeds: [{ market: "forex", ticker: "FX:GBPUSD" }, { market: "forex", ticker: "OANDA:GBPUSD" }], cotMarket: "BRITISH POUND - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["BRITISH POUND - CHICAGO MERCANTILE EXCHANGE", "BRITISH POUND STERLING - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "USDJPY", label: "US Dollar / Japanese Yen", group: "Forex", yahooSymbols: ["JPY=X", "6J=F"], tvFeeds: [{ market: "forex", ticker: "FX:USDJPY" }, { market: "forex", ticker: "OANDA:USDJPY" }], cotMarket: "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE" },
   { id: "AUDUSD", label: "Australian Dollar / US Dollar", group: "Forex", yahooSymbols: ["AUDUSD=X", "6A=F"], tvFeeds: [{ market: "forex", ticker: "FX:AUDUSD" }, { market: "forex", ticker: "OANDA:AUDUSD" }], cotMarket: "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE" },
   { id: "USDCAD", label: "US Dollar / Canadian Dollar", group: "Forex", yahooSymbols: ["CAD=X", "6C=F"], tvFeeds: [{ market: "forex", ticker: "FX:USDCAD" }, { market: "forex", ticker: "OANDA:USDCAD" }], cotMarket: "CANADIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE" },
   { id: "USDCHF", label: "US Dollar / Swiss Franc", group: "Forex", yahooSymbols: ["CHF=X", "6S=F"], tvFeeds: [{ market: "forex", ticker: "FX:USDCHF" }, { market: "forex", ticker: "OANDA:USDCHF" }], cotMarket: "SWISS FRANC - CHICAGO MERCANTILE EXCHANGE" },
-  { id: "NZDUSD", label: "New Zealand Dollar / US Dollar", group: "Forex", yahooSymbols: ["NZDUSD=X", "6N=F"], tvFeeds: [{ market: "forex", ticker: "FX:NZDUSD" }, { market: "forex", ticker: "OANDA:NZDUSD" }], cotMarket: "NEW ZEALAND DOLLAR - CHICAGO MERCANTILE EXCHANGE" },
+  { id: "NZDUSD", label: "New Zealand Dollar / US Dollar", group: "Forex", yahooSymbols: ["NZDUSD=X", "6N=F"], tvFeeds: [{ market: "forex", ticker: "FX:NZDUSD" }, { market: "forex", ticker: "OANDA:NZDUSD" }], cotMarket: "NZ DOLLAR - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["NZ DOLLAR - CHICAGO MERCANTILE EXCHANGE", "NEW ZEALAND DOLLAR - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "USDMXN", label: "US Dollar / Mexican Peso", group: "Forex", yahooSymbols: ["MXN=X", "6M=F"], tvFeeds: [{ market: "forex", ticker: "FX:USDMXN" }, { market: "forex", ticker: "OANDA:USDMXN" }], cotMarket: "MEXICAN PESO - CHICAGO MERCANTILE EXCHANGE" },
   { id: "USDNOK", label: "US Dollar / Norwegian Krone", group: "Forex", yahooSymbols: ["NOK=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDNOK" }, { market: "forex", ticker: "OANDA:USDNOK" }], cotMarket: null },
   { id: "USDSEK", label: "US Dollar / Swedish Krona", group: "Forex", yahooSymbols: ["SEK=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDSEK" }, { market: "forex", ticker: "OANDA:USDSEK" }], cotMarket: null },
   { id: "USDTRY", label: "US Dollar / Turkish Lira", group: "Forex", yahooSymbols: ["TRY=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDTRY" }, { market: "forex", ticker: "OANDA:USDTRY" }], cotMarket: null },
-  { id: "USDZAR", label: "US Dollar / South African Rand", group: "Forex", yahooSymbols: ["ZAR=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDZAR" }, { market: "forex", ticker: "OANDA:USDZAR" }], cotMarket: null },
+  { id: "USDZAR", label: "US Dollar / South African Rand", group: "Forex", yahooSymbols: ["ZAR=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDZAR" }, { market: "forex", ticker: "OANDA:USDZAR" }], cotMarket: "SO AFRICAN RAND - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["SO AFRICAN RAND - CHICAGO MERCANTILE EXCHANGE", "SOUTH AFRICAN RAND - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "USDCNH", label: "US Dollar / Offshore Chinese Yuan", group: "Forex", yahooSymbols: ["CNH=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDCNH" }, { market: "forex", ticker: "OANDA:USDCNH" }], cotMarket: null },
-  { id: "SPX500", label: "S&P 500", group: "Indices", yahooSymbols: ["^GSPC", "ES=F"], tvFeeds: [{ market: "indices", ticker: "SP:SPX" }, { market: "cfd", ticker: "OANDA:SPX500USD" }], cotMarket: "E-MINI S&P 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE" },
-  { id: "NAS100", label: "Nasdaq 100", group: "Indices", yahooSymbols: ["^NDX", "NQ=F"], tvFeeds: [{ market: "indices", ticker: "NASDAQ:NDX" }, { market: "cfd", ticker: "OANDA:NAS100USD" }], cotMarket: "E-MINI NASDAQ-100 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE" },
-  { id: "DOW30", label: "Dow Jones 30", group: "Indices", yahooSymbols: ["^DJI", "YM=F"], tvFeeds: [{ market: "indices", ticker: "DJ:DJI" }, { market: "cfd", ticker: "OANDA:US30USD" }], cotMarket: null },
-  { id: "RUS2000", label: "Russell 2000", group: "Indices", yahooSymbols: ["^RUT", "RTY=F"], tvFeeds: [{ market: "indices", ticker: "RUSSELL:RUT" }], cotMarket: null },
+  { id: "SPX500", label: "S&P 500", group: "Indices", yahooSymbols: ["^GSPC", "ES=F"], tvFeeds: [{ market: "indices", ticker: "SP:SPX" }, { market: "cfd", ticker: "OANDA:SPX500USD" }], cotMarket: "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE", "E-MINI S&P 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE"] },
+  { id: "NAS100", label: "Nasdaq 100", group: "Indices", yahooSymbols: ["^NDX", "NQ=F"], tvFeeds: [{ market: "indices", ticker: "NASDAQ:NDX" }, { market: "cfd", ticker: "OANDA:NAS100USD" }], cotMarket: "NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE", "NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE", "E-MINI NASDAQ-100 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE"] },
+  { id: "DOW30", label: "Dow Jones 30", group: "Indices", yahooSymbols: ["^DJI", "YM=F"], tvFeeds: [{ market: "indices", ticker: "DJ:DJI" }, { market: "cfd", ticker: "OANDA:US30USD" }], cotMarket: "DJIA x $5 - CHICAGO BOARD OF TRADE", cotMarkets: ["DJIA x $5 - CHICAGO BOARD OF TRADE", "DOW JONES INDUSTRIAL AVG- x $5 - CHICAGO BOARD OF TRADE"] },
+  { id: "RUS2000", label: "Russell 2000", group: "Indices", yahooSymbols: ["^RUT", "RTY=F"], tvFeeds: [{ market: "indices", ticker: "RUSSELL:RUT" }], cotMarket: "RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE", "E-MINI RUSSELL 2000 INDEX - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "DAX40", label: "DAX 40", group: "Indices", yahooSymbols: ["^GDAXI"], tvFeeds: [{ market: "indices", ticker: "XETR:DAX" }], cotMarket: null },
   { id: "FTSE100", label: "FTSE 100", group: "Indices", yahooSymbols: ["^FTSE"], tvFeeds: [{ market: "indices", ticker: "TVC:UKX" }], cotMarket: null },
-  { id: "NIKKEI225", label: "Nikkei 225", group: "Indices", yahooSymbols: ["^N225"], tvFeeds: [{ market: "indices", ticker: "TVC:NI225" }], cotMarket: null },
+  { id: "NIKKEI225", label: "Nikkei 225", group: "Indices", yahooSymbols: ["^N225"], tvFeeds: [{ market: "indices", ticker: "TVC:NI225" }], cotMarket: "NIKKEI STOCK AVERAGE YEN DENOM - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["NIKKEI STOCK AVERAGE YEN DENOM - CHICAGO MERCANTILE EXCHANGE", "NIKKEI STOCK AVERAGE - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "HANGSENG", label: "Hang Seng", group: "Indices", yahooSymbols: ["^HSI"], tvFeeds: [{ market: "indices", ticker: "HSI:HSI" }], cotMarket: null },
-  { id: "XPDUSD", label: "Palladium Spot", group: "Metals", yahooSymbols: ["PA=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:PALLADIUM" }], cotMarket: null },
-  { id: "COPPER", label: "Copper", group: "Metals", yahooSymbols: ["HG=F"], tvFeeds: [{ market: "futures", ticker: "COMEX:HG1!" }], cotMarket: "COPPER-GRADE #1 - COMMODITY EXCHANGE INC." },
+  { id: "XPDUSD", label: "Palladium Spot", group: "Metals", yahooSymbols: ["PA=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:PALLADIUM" }], cotMarket: "PALLADIUM - NEW YORK MERCANTILE EXCHANGE" },
+  { id: "COPPER", label: "Copper", group: "Metals", yahooSymbols: ["HG=F"], tvFeeds: [{ market: "futures", ticker: "COMEX:HG1!" }], cotMarket: "COPPER- #1 - COMMODITY EXCHANGE INC.", cotMarkets: ["COPPER- #1 - COMMODITY EXCHANGE INC.", "COPPER-GRADE #1 - COMMODITY EXCHANGE INC."] },
   { id: "WHEAT", label: "Wheat", group: "Agriculture", yahooSymbols: ["ZW=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZW1!" }], cotMarket: "WHEAT-SRW - CHICAGO BOARD OF TRADE" },
   { id: "CORN", label: "Corn", group: "Agriculture", yahooSymbols: ["ZC=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZC1!" }], cotMarket: "CORN - CHICAGO BOARD OF TRADE" },
   { id: "SOYBEAN", label: "Soybeans", group: "Agriculture", yahooSymbols: ["ZS=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZS1!" }], cotMarket: "SOYBEANS - CHICAGO BOARD OF TRADE" },
-  { id: "SOYMEAL", label: "Soybean Meal", group: "Agriculture", yahooSymbols: ["ZM=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZM1!" }], cotMarket: null },
-  { id: "SOYOIL", label: "Soybean Oil", group: "Agriculture", yahooSymbols: ["ZL=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZL1!" }], cotMarket: null },
+  { id: "SOYMEAL", label: "Soybean Meal", group: "Agriculture", yahooSymbols: ["ZM=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZM1!" }], cotMarket: "SOYBEAN MEAL - CHICAGO BOARD OF TRADE" },
+  { id: "SOYOIL", label: "Soybean Oil", group: "Agriculture", yahooSymbols: ["ZL=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZL1!" }], cotMarket: "SOYBEAN OIL - CHICAGO BOARD OF TRADE" },
   { id: "COFFEE", label: "Coffee", group: "Agriculture", yahooSymbols: ["KC=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:KC1!" }], cotMarket: "COFFEE C - ICE FUTURES U.S." },
   { id: "SUGAR", label: "Sugar", group: "Agriculture", yahooSymbols: ["SB=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:SB1!" }], cotMarket: "SUGAR NO. 11 - ICE FUTURES U.S." },
   { id: "COTTON", label: "Cotton", group: "Agriculture", yahooSymbols: ["CT=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CT1!" }], cotMarket: "COTTON NO. 2 - ICE FUTURES U.S." },
   { id: "COCOA", label: "Cocoa", group: "Agriculture", yahooSymbols: ["CC=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CC1!" }], cotMarket: "COCOA - ICE FUTURES U.S." },
-  { id: "OATS", label: "Oats", group: "Agriculture", yahooSymbols: ["ZO=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZO1!" }], cotMarket: null },
+  { id: "OATS", label: "Oats", group: "Agriculture", yahooSymbols: ["ZO=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZO1!" }], cotMarket: "OATS - CHICAGO BOARD OF TRADE" },
 ];
 
 const PRICE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -228,6 +228,8 @@ const state = {
   macroLastFetchAt: 0,
   macroLastLiveSuccessAt: 0,
   macroIsLoading: false,
+  macroWatcherId: null,
+  macroActualJustUpdated: false,
   lastExternalNotifyAt: {},
   lastJournalKey: null,
   currentQualityScore: 70,
@@ -897,6 +899,9 @@ async function fetchJsonAnyRoute(url) {
 
 const MACRO_REFRESH_MS_OK = 5 * 60 * 1000;
 const MACRO_REFRESH_MS_DEGRADED = 60 * 1000;
+const MACRO_REFRESH_MS_HOT = 15 * 1000;
+const MACRO_HOT_PRE_MS = 10 * 60 * 1000;
+const MACRO_HOT_POST_MS = 45 * 60 * 1000;
 const MACRO_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 const TRACKED_MACRO_CURRENCIES = ["USD", "EUR", "AUD", "JPY", "GBP", "CHF", "CAD", "NZD"];
@@ -962,18 +967,63 @@ function normalizeMacroRows(rows, sourceName, sourceUrl) {
     .map((r) => ({ ...r, time: formatRomeTime(r.date) }));
 }
 
+function isMacroValueFilled(value) {
+  const text = String(value ?? "").trim();
+  return Boolean(text) && text !== "--";
+}
+
+function preferMacroFilled(oldVal, newVal) {
+  if (isMacroValueFilled(newVal)) return String(newVal).trim();
+  if (isMacroValueFilled(oldVal)) return String(oldVal).trim();
+  return "--";
+}
+
+function macroRowKey(r) {
+  const ts = r?.date?.getTime?.();
+  if (!Number.isFinite(ts)) return null;
+  return `${ts}|${String(r.country || "").toUpperCase()}|${String(r.category || "").toUpperCase()}|${String(r.event || "").toUpperCase()}`;
+}
+
 function dedupeMacroRows(rows) {
-  const seen = new Set();
-  const out = [];
+  const map = new Map();
   rows.forEach((r) => {
-    const ts = r?.date?.getTime?.();
-    if (!Number.isFinite(ts)) return;
-    const key = `${ts}|${String(r.country || "").toUpperCase()}|${String(r.category || "").toUpperCase()}|${String(r.event || "").toUpperCase()}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push(r);
+    const key = macroRowKey(r);
+    if (!key) return;
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, r);
+      return;
+    }
+    map.set(key, {
+      ...prev,
+      ...r,
+      previous: preferMacroFilled(prev.previous, r.previous),
+      forecast: preferMacroFilled(prev.forecast, r.forecast),
+      actual: preferMacroFilled(prev.actual, r.actual),
+      source: isMacroValueFilled(r.actual) && !isMacroValueFilled(prev.actual)
+        ? r.source || prev.source
+        : prev.source || r.source,
+    });
   });
-  return out.sort((a, b) => a.date - b.date);
+  return Array.from(map.values()).sort((a, b) => a.date - b.date);
+}
+
+function hasPendingMacroActuals(now = Date.now()) {
+  return (state.macroEvents || []).some((e) => {
+    const ts = e?.date?.getTime?.();
+    if (!Number.isFinite(ts)) return false;
+    const actualMissing = !isMacroValueFilled(e.actual);
+    if (ts >= now && ts - now <= MACRO_HOT_PRE_MS) return true;
+    if (ts <= now && now - ts <= MACRO_HOT_POST_MS && actualMissing) return true;
+    return false;
+  });
+}
+
+function collectMacroActualFingerprint(rows = state.macroEvents) {
+  return (rows || [])
+    .map((e) => `${macroRowKey(e)}=${String(e?.actual ?? "--")}`)
+    .sort()
+    .join("|");
 }
 
 function hasFreshMacroWindow(rows) {
@@ -1481,7 +1531,15 @@ function renderMacroCalendar() {
     const lastSync = state.macroLastFetchAt ? new Date(state.macroLastFetchAt).toLocaleTimeString("it-IT") : "--";
     const liveSync = state.macroLastLiveSuccessAt ? new Date(state.macroLastLiveSuccessAt).toLocaleTimeString("it-IT") : "--";
     const currencies = [...new Set(allValid.map((e) => e.country))].sort().join(",");
-    macroSourceInfoEl.textContent = `Fonte macro: ${state.macroSource || "--"} | Eventi: ${filtered.length} | validi: ${allValid.length} | valute: ${currencies || "--"} | sync: ${lastSync} | live: ${liveSync}`;
+    const hot = hasPendingMacroActuals();
+    const hotLabel = hot ? " | auto-sync dato in uscita (~15s)" : "";
+    const updatedLabel = state.macroActualJustUpdated ? " | dato aggiornato" : "";
+    macroSourceInfoEl.textContent = `Fonte macro: ${state.macroSource || "--"} | Eventi: ${filtered.length} | validi: ${allValid.length} | valute: ${currencies || "--"} | sync: ${lastSync} | live: ${liveSync}${hotLabel}${updatedLabel}`;
+    if (state.macroActualJustUpdated) {
+      setTimeout(() => {
+        state.macroActualJustUpdated = false;
+      }, 2000);
+    }
   }
   const src = String(state.macroSource || "").toLowerCase();
   if (src.includes("live merge")) {
@@ -1532,9 +1590,25 @@ function renderMacroCalendar() {
           const eventName = escapeHtml(e.event || "--");
           const previous = escapeHtml(e.previous || "--");
           const forecast = escapeHtml(e.forecast || "--");
-          const actual = escapeHtml(e.actual || "--");
+          const actualRaw = String(e.actual || "--");
+          const actualFilled = isMacroValueFilled(actualRaw);
+          const actual = escapeHtml(actualRaw);
           const source = escapeHtml(e.source || state.macroSource || "--");
           const detailId = `macro-det-${dayKey}-${idx}`;
+          const eventMs = e.date?.getTime?.() || 0;
+          const nowMs = Date.now();
+          const waitingActual =
+            actualFilled === false &&
+            Number.isFinite(eventMs) &&
+            eventMs <= nowMs &&
+            nowMs - eventMs <= MACRO_HOT_POST_MS;
+          const actualClass = actualFilled
+            ? state.macroActualJustUpdated
+              ? "macro-actual macro-actual-fresh"
+              : "macro-actual"
+            : waitingActual
+              ? "macro-actual macro-actual-pending"
+              : "macro-actual";
           return `<details class="macro-event-item macro-impact-${e.impact}">
             <summary class="macro-event-summary">
               <div class="macro-event-head">
@@ -1549,7 +1623,7 @@ function renderMacroCalendar() {
               <div><strong>Importanza:</strong> ${impactLabel}</div>
               <div><strong>Dato precedente:</strong> ${previous}</div>
               <div><strong>Aspettativa:</strong> ${forecast}</div>
-              <div><strong>Dato uscito:</strong> ${actual}</div>
+              <div class="${actualClass}"><strong>Dato uscito:</strong> ${actual}</div>
               <div class="muted"><strong>Fonte:</strong> ${source}</div>
             </div>
           </details>`;
@@ -1569,10 +1643,11 @@ function renderMacroCalendar() {
 async function loadMacroCalendar() {
   if (state.macroIsLoading) return;
   state.macroIsLoading = true;
+  const prevActualFp = collectMacroActualFingerprint();
   const task = await timedTask(() => fetchMacroCalendar());
   try {
     if (task.ok && Array.isArray(task.value?.rows) && task.value.rows.length) {
-      state.macroEvents = task.value.rows;
+      state.macroEvents = dedupeMacroRows([...(state.macroEvents || []), ...task.value.rows]);
       state.macroSource = task.value.source || "--";
       state.macroLastFetchAt = Date.now();
       if (/\bLIVE\b/i.test(String(task.value.source || "")) || String(task.value.mode || "").toUpperCase() === "LIVE") {
@@ -1582,13 +1657,15 @@ async function loadMacroCalendar() {
         state.macroPreferredSource = task.value.primarySource;
       }
       saveCache(CACHE_KEYS.MACRO, {
-        rows: task.value.rows.map((r) => ({
+        rows: state.macroEvents.map((r) => ({
           ...r,
           date: r.date?.toISOString?.() || null,
         })),
         source: state.macroSource,
         fetchedAt: new Date().toISOString(),
       });
+      const nextActualFp = collectMacroActualFingerprint();
+      state.macroActualJustUpdated = Boolean(prevActualFp) && prevActualFp !== nextActualFp;
     } else {
       const cachedMacro = loadCache(CACHE_KEYS.MACRO);
       const cacheFetchedAtMs = cachedMacro?.fetchedAt ? new Date(cachedMacro.fetchedAt).getTime() : 0;
@@ -1605,6 +1682,7 @@ async function loadMacroCalendar() {
         state.macroSource = `Feed macro non disponibile${task.error ? ` (${task.error})` : ""}`;
         state.macroLastFetchAt = Date.now();
       }
+      state.macroActualJustUpdated = false;
     }
     renderMacroCalendar();
   } finally {
@@ -1616,13 +1694,22 @@ function refreshMacroIfStale({ force = false } = {}) {
   const now = Date.now();
   const sourceText = String(state.macroSource || "").toLowerCase();
   const degraded = !state.macroLastLiveSuccessAt || sourceText.includes("cache") || !state.macroEvents?.length;
-  const staleMs = degraded ? MACRO_REFRESH_MS_DEGRADED : MACRO_REFRESH_MS_OK;
+  const hot = hasPendingMacroActuals(now);
+  const staleMs = hot ? MACRO_REFRESH_MS_HOT : degraded ? MACRO_REFRESH_MS_DEGRADED : MACRO_REFRESH_MS_OK;
   if (!force && state.macroLastFetchAt && now - state.macroLastFetchAt < staleMs) return;
   loadMacroCalendar().catch(() => {
     state.macroSource = "Feed macro non disponibile (errore aggiornamento)";
     state.macroLastFetchAt = Date.now();
     renderMacroCalendar();
   });
+}
+
+function startMacroActualWatcher() {
+  if (state.macroWatcherId) clearInterval(state.macroWatcherId);
+  state.macroWatcherId = setInterval(() => {
+    if (document.hidden) return;
+    refreshMacroIfStale();
+  }, MACRO_REFRESH_MS_HOT);
 }
 
 function computeMacroRiskWindow(now = new Date()) {
@@ -2003,19 +2090,13 @@ async function getCotForAsset(asset) {
     if (error?.status === 401 || error?.status === 403) throw error;
     // fallback client-side if backend is offline
   }
-  if (!asset?.cotMarket) {
-    return { rows: [], source: `COT non disponibile per ${asset?.id || "asset"}` };
+  const markets = getCotMarketNames(asset);
+  if (!markets.length) {
+    return { rows: [], source: `COT non disponibile per ${asset?.id || "asset"} (nessun futures CFTC)` };
   }
-  const whereExpr = `market_and_exchange_names='${asset.cotMarket}'`;
-  const url =
-    "https://publicreporting.cftc.gov/resource/6dca-aqww.json" +
-    "?$select=report_date_as_yyyy_mm_dd,open_interest_all,noncomm_positions_long_all,noncomm_positions_short_all,comm_positions_long_all,comm_positions_short_all,nonrept_positions_long_all,nonrept_positions_short_all" +
-    `&$where=${encodeURIComponent(whereExpr)}` +
-    "&$order=report_date_as_yyyy_mm_dd%20DESC" +
-    "&$limit=260";
 
   const parseRows = (raw) =>
-    raw
+    (Array.isArray(raw) ? raw : [])
       .map((row) => {
         const date = parseCotReportDate(row.report_date_as_yyyy_mm_dd);
         const oi = Number(row.open_interest_all);
@@ -2059,19 +2140,32 @@ async function getCotForAsset(asset) {
       .sort((a, b) => a.date - b.date);
 
   try {
-    let raw = await fetchJsonCorsAware(url);
-    if (!Array.isArray(raw) || !raw.length) {
-      raw = await fetchJsonAnyRoute(url);
+    let best = null;
+    for (const market of markets) {
+      const whereExpr = `market_and_exchange_names='${market}'`;
+      const url =
+        "https://publicreporting.cftc.gov/resource/6dca-aqww.json" +
+        "?$select=report_date_as_yyyy_mm_dd,open_interest_all,noncomm_positions_long_all,noncomm_positions_short_all,comm_positions_long_all,comm_positions_short_all,nonrept_positions_long_all,nonrept_positions_short_all" +
+        `&$where=${encodeURIComponent(whereExpr)}` +
+        "&$order=report_date_as_yyyy_mm_dd%20DESC" +
+        "&$limit=260";
+      let raw = await fetchJsonCorsAware(url);
+      if (!Array.isArray(raw) || !raw.length) {
+        raw = await fetchJsonAnyRoute(url);
+      }
+      if (!Array.isArray(raw)) continue;
+      const rows = parseRows(raw);
+      if (!rows.length) continue;
+      const latestMs = rows[rows.length - 1]?.date?.getTime?.() || 0;
+      if (!best || latestMs > best.latestMs) best = { rows, market, latestMs };
+      if (Date.now() - latestMs <= 45 * 24 * 60 * 60 * 1000) break;
     }
-    if (!Array.isArray(raw)) throw new Error("payload COT non valido");
-    const rows = parseRows(raw);
-
-    if (!rows.length) {
+    if (!best?.rows?.length) {
       throw new Error(`nessun record COT per ${asset.id}`);
     }
     return {
-      rows,
-      source: `CFTC Socrata 6dca-aqww (${asset.id})`,
+      rows: best.rows,
+      source: `CFTC Socrata 6dca-aqww (${asset.id} · ${best.market})`,
     };
   } catch (error) {
     // Mai usare snapshot inventati: meglio vuoto + messaggio chiaro
@@ -2080,6 +2174,13 @@ async function getCotForAsset(asset) {
       source: `COT non disponibile ora (${error?.message || "feed CFTC irraggiungibile"})`,
     };
   }
+}
+
+function getCotMarketNames(asset) {
+  const names = [];
+  if (Array.isArray(asset?.cotMarkets)) names.push(...asset.cotMarkets);
+  if (asset?.cotMarket) names.push(asset.cotMarket);
+  return [...new Set(names.map((n) => String(n || "").trim()).filter(Boolean))];
 }
 
 function realizedVol(prices, windowDays = 30) {
@@ -5763,6 +5864,7 @@ async function init() {
   ensureResizeObservers();
   wireEvents();
   wireRealtimeLifecycleRefresh();
+  startMacroActualWatcher();
   refreshMacroIfStale({ force: true });
   setActivePage(state.activePage || "cot");
   if (state.priceData || state.cotData) {

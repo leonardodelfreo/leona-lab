@@ -87,6 +87,9 @@ const PLAN_CATALOG = {
 
 const MACRO_REFRESH_MS_OK = 5 * 60 * 1000;
 const MACRO_REFRESH_MS_DEGRADED = 60 * 1000;
+const MACRO_REFRESH_MS_HOT = 20 * 1000;
+const MACRO_HOT_PRE_MS = 10 * 60 * 1000;
+const MACRO_HOT_POST_MS = 45 * 60 * 1000;
 const MACRO_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const PRICE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const COT_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -95,40 +98,40 @@ const ASSET_CATALOG = [
   { id: "XAUUSD", yahooSymbols: ["XAUUSD=X", "GC=F"], stooqSymbol: "xauusd", tvFeeds: [{ market: "cfd", ticker: "TVC:GOLD" }, { market: "forex", ticker: "OANDA:XAUUSD" }], cotMarket: "GOLD - COMMODITY EXCHANGE INC." },
   { id: "XAGUSD", yahooSymbols: ["XAGUSD=X", "SI=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:SILVER" }, { market: "forex", ticker: "OANDA:XAGUSD" }], cotMarket: "SILVER - COMMODITY EXCHANGE INC." },
   { id: "XPTUSD", yahooSymbols: ["PL=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:PLATINUM" }], cotMarket: "PLATINUM - NEW YORK MERCANTILE EXCHANGE" },
-  { id: "DXY", yahooSymbols: ["DX-Y.NYB", "DX=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:DXY" }, { market: "futures", ticker: "ICEUS:DX1!" }], cotMarket: "U.S. DOLLAR INDEX - ICE FUTURES U.S." },
+  { id: "DXY", yahooSymbols: ["DX-Y.NYB", "DX=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:DXY" }, { market: "futures", ticker: "ICEUS:DX1!" }], cotMarket: "USD INDEX - ICE FUTURES U.S.", cotMarkets: ["USD INDEX - ICE FUTURES U.S.", "U.S. DOLLAR INDEX - ICE FUTURES U.S."] },
   { id: "EURUSD", yahooSymbols: ["EURUSD=X", "6E=F"], tvFeeds: [{ market: "forex", ticker: "FX:EURUSD" }, { market: "forex", ticker: "OANDA:EURUSD" }], cotMarket: "EURO FX - CHICAGO MERCANTILE EXCHANGE" },
-  { id: "GBPUSD", yahooSymbols: ["GBPUSD=X", "6B=F"], tvFeeds: [{ market: "forex", ticker: "FX:GBPUSD" }, { market: "forex", ticker: "OANDA:GBPUSD" }], cotMarket: "BRITISH POUND STERLING - CHICAGO MERCANTILE EXCHANGE" },
+  { id: "GBPUSD", yahooSymbols: ["GBPUSD=X", "6B=F"], tvFeeds: [{ market: "forex", ticker: "FX:GBPUSD" }, { market: "forex", ticker: "OANDA:GBPUSD" }], cotMarket: "BRITISH POUND - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["BRITISH POUND - CHICAGO MERCANTILE EXCHANGE", "BRITISH POUND STERLING - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "USDJPY", yahooSymbols: ["JPY=X", "6J=F"], tvFeeds: [{ market: "forex", ticker: "FX:USDJPY" }, { market: "forex", ticker: "OANDA:USDJPY" }], cotMarket: "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE" },
   { id: "AUDUSD", yahooSymbols: ["AUDUSD=X", "6A=F"], tvFeeds: [{ market: "forex", ticker: "FX:AUDUSD" }, { market: "forex", ticker: "OANDA:AUDUSD" }], cotMarket: "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE" },
   { id: "USDCAD", yahooSymbols: ["CAD=X", "6C=F"], tvFeeds: [{ market: "forex", ticker: "FX:USDCAD" }, { market: "forex", ticker: "OANDA:USDCAD" }], cotMarket: "CANADIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE" },
   { id: "USDCHF", yahooSymbols: ["CHF=X", "6S=F"], tvFeeds: [{ market: "forex", ticker: "FX:USDCHF" }, { market: "forex", ticker: "OANDA:USDCHF" }], cotMarket: "SWISS FRANC - CHICAGO MERCANTILE EXCHANGE" },
-  { id: "NZDUSD", yahooSymbols: ["NZDUSD=X", "6N=F"], tvFeeds: [{ market: "forex", ticker: "FX:NZDUSD" }, { market: "forex", ticker: "OANDA:NZDUSD" }], cotMarket: "NEW ZEALAND DOLLAR - CHICAGO MERCANTILE EXCHANGE" },
+  { id: "NZDUSD", yahooSymbols: ["NZDUSD=X", "6N=F"], tvFeeds: [{ market: "forex", ticker: "FX:NZDUSD" }, { market: "forex", ticker: "OANDA:NZDUSD" }], cotMarket: "NZ DOLLAR - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["NZ DOLLAR - CHICAGO MERCANTILE EXCHANGE", "NEW ZEALAND DOLLAR - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "USDMXN", yahooSymbols: ["MXN=X", "6M=F"], tvFeeds: [{ market: "forex", ticker: "FX:USDMXN" }, { market: "forex", ticker: "OANDA:USDMXN" }], cotMarket: "MEXICAN PESO - CHICAGO MERCANTILE EXCHANGE" },
   { id: "USDNOK", yahooSymbols: ["NOK=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDNOK" }, { market: "forex", ticker: "OANDA:USDNOK" }], cotMarket: null },
   { id: "USDSEK", yahooSymbols: ["SEK=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDSEK" }, { market: "forex", ticker: "OANDA:USDSEK" }], cotMarket: null },
   { id: "USDTRY", yahooSymbols: ["TRY=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDTRY" }, { market: "forex", ticker: "OANDA:USDTRY" }], cotMarket: null },
-  { id: "USDZAR", yahooSymbols: ["ZAR=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDZAR" }, { market: "forex", ticker: "OANDA:USDZAR" }], cotMarket: null },
+  { id: "USDZAR", yahooSymbols: ["ZAR=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDZAR" }, { market: "forex", ticker: "OANDA:USDZAR" }], cotMarket: "SO AFRICAN RAND - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["SO AFRICAN RAND - CHICAGO MERCANTILE EXCHANGE", "SOUTH AFRICAN RAND - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "USDCNH", yahooSymbols: ["CNH=X"], tvFeeds: [{ market: "forex", ticker: "FX:USDCNH" }, { market: "forex", ticker: "OANDA:USDCNH" }], cotMarket: null },
-  { id: "SPX500", yahooSymbols: ["^GSPC", "ES=F"], tvFeeds: [{ market: "indices", ticker: "SP:SPX" }, { market: "cfd", ticker: "OANDA:SPX500USD" }], cotMarket: "E-MINI S&P 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE" },
-  { id: "NAS100", yahooSymbols: ["^NDX", "NQ=F"], tvFeeds: [{ market: "indices", ticker: "NASDAQ:NDX" }, { market: "cfd", ticker: "OANDA:NAS100USD" }], cotMarket: "E-MINI NASDAQ-100 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE" },
-  { id: "DOW30", yahooSymbols: ["^DJI", "YM=F"], tvFeeds: [{ market: "indices", ticker: "DJ:DJI" }, { market: "cfd", ticker: "OANDA:US30USD" }], cotMarket: null },
-  { id: "RUS2000", yahooSymbols: ["^RUT", "RTY=F"], tvFeeds: [{ market: "indices", ticker: "RUSSELL:RUT" }], cotMarket: null },
+  { id: "SPX500", yahooSymbols: ["^GSPC", "ES=F"], tvFeeds: [{ market: "indices", ticker: "SP:SPX" }, { market: "cfd", ticker: "OANDA:SPX500USD" }], cotMarket: "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE", "E-MINI S&P 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE"] },
+  { id: "NAS100", yahooSymbols: ["^NDX", "NQ=F"], tvFeeds: [{ market: "indices", ticker: "NASDAQ:NDX" }, { market: "cfd", ticker: "OANDA:NAS100USD" }], cotMarket: "NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE", "NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE", "E-MINI NASDAQ-100 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE"] },
+  { id: "DOW30", yahooSymbols: ["^DJI", "YM=F"], tvFeeds: [{ market: "indices", ticker: "DJ:DJI" }, { market: "cfd", ticker: "OANDA:US30USD" }], cotMarket: "DJIA x $5 - CHICAGO BOARD OF TRADE", cotMarkets: ["DJIA x $5 - CHICAGO BOARD OF TRADE", "DOW JONES INDUSTRIAL AVG- x $5 - CHICAGO BOARD OF TRADE"] },
+  { id: "RUS2000", yahooSymbols: ["^RUT", "RTY=F"], tvFeeds: [{ market: "indices", ticker: "RUSSELL:RUT" }], cotMarket: "RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE", "E-MINI RUSSELL 2000 INDEX - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "DAX40", yahooSymbols: ["^GDAXI"], tvFeeds: [{ market: "indices", ticker: "XETR:DAX" }], cotMarket: null },
   { id: "FTSE100", yahooSymbols: ["^FTSE"], tvFeeds: [{ market: "indices", ticker: "TVC:UKX" }], cotMarket: null },
-  { id: "NIKKEI225", yahooSymbols: ["^N225"], tvFeeds: [{ market: "indices", ticker: "TVC:NI225" }], cotMarket: null },
+  { id: "NIKKEI225", yahooSymbols: ["^N225"], tvFeeds: [{ market: "indices", ticker: "TVC:NI225" }], cotMarket: "NIKKEI STOCK AVERAGE YEN DENOM - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["NIKKEI STOCK AVERAGE YEN DENOM - CHICAGO MERCANTILE EXCHANGE", "NIKKEI STOCK AVERAGE - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "HANGSENG", yahooSymbols: ["^HSI"], tvFeeds: [{ market: "indices", ticker: "HSI:HSI" }], cotMarket: null },
-  { id: "XPDUSD", yahooSymbols: ["PA=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:PALLADIUM" }], cotMarket: null },
-  { id: "COPPER", yahooSymbols: ["HG=F"], tvFeeds: [{ market: "futures", ticker: "COMEX:HG1!" }], cotMarket: "COPPER-GRADE #1 - COMMODITY EXCHANGE INC." },
+  { id: "XPDUSD", yahooSymbols: ["PA=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:PALLADIUM" }], cotMarket: "PALLADIUM - NEW YORK MERCANTILE EXCHANGE" },
+  { id: "COPPER", yahooSymbols: ["HG=F"], tvFeeds: [{ market: "futures", ticker: "COMEX:HG1!" }], cotMarket: "COPPER- #1 - COMMODITY EXCHANGE INC.", cotMarkets: ["COPPER- #1 - COMMODITY EXCHANGE INC.", "COPPER-GRADE #1 - COMMODITY EXCHANGE INC."] },
   { id: "WHEAT", yahooSymbols: ["ZW=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZW1!" }], cotMarket: "WHEAT-SRW - CHICAGO BOARD OF TRADE" },
   { id: "CORN", yahooSymbols: ["ZC=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZC1!" }], cotMarket: "CORN - CHICAGO BOARD OF TRADE" },
   { id: "SOYBEAN", yahooSymbols: ["ZS=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZS1!" }], cotMarket: "SOYBEANS - CHICAGO BOARD OF TRADE" },
-  { id: "SOYMEAL", yahooSymbols: ["ZM=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZM1!" }], cotMarket: null },
-  { id: "SOYOIL", yahooSymbols: ["ZL=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZL1!" }], cotMarket: null },
+  { id: "SOYMEAL", yahooSymbols: ["ZM=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZM1!" }], cotMarket: "SOYBEAN MEAL - CHICAGO BOARD OF TRADE" },
+  { id: "SOYOIL", yahooSymbols: ["ZL=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZL1!" }], cotMarket: "SOYBEAN OIL - CHICAGO BOARD OF TRADE" },
   { id: "COFFEE", yahooSymbols: ["KC=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:KC1!" }], cotMarket: "COFFEE C - ICE FUTURES U.S." },
   { id: "SUGAR", yahooSymbols: ["SB=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:SB1!" }], cotMarket: "SUGAR NO. 11 - ICE FUTURES U.S." },
   { id: "COTTON", yahooSymbols: ["CT=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CT1!" }], cotMarket: "COTTON NO. 2 - ICE FUTURES U.S." },
   { id: "COCOA", yahooSymbols: ["CC=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CC1!" }], cotMarket: "COCOA - ICE FUTURES U.S." },
-  { id: "OATS", yahooSymbols: ["ZO=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZO1!" }], cotMarket: null },
+  { id: "OATS", yahooSymbols: ["ZO=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZO1!" }], cotMarket: "OATS - CHICAGO BOARD OF TRADE" },
 ];
 
 const macroState = {
@@ -1350,18 +1353,63 @@ function normalizeMacroRows(rows, sourceName, sourceUrl) {
     .filter((r) => r && r.event && r.date instanceof Date && !Number.isNaN(r.date.getTime()));
 }
 
+function isMacroValueFilled(value) {
+  const text = String(value ?? "").trim();
+  return Boolean(text) && text !== "--";
+}
+
+function preferMacroFilled(oldVal, newVal) {
+  if (isMacroValueFilled(newVal)) return String(newVal).trim();
+  if (isMacroValueFilled(oldVal)) return String(oldVal).trim();
+  return "--";
+}
+
+function macroRowKey(r) {
+  const ts = r?.date?.getTime?.();
+  if (!Number.isFinite(ts)) return null;
+  return `${ts}|${String(r.country || "").toUpperCase()}|${String(r.category || "").toUpperCase()}|${String(r.event || "").toUpperCase()}`;
+}
+
 function dedupeMacroRows(rows) {
-  const seen = new Set();
-  const out = [];
+  const map = new Map();
   rows.forEach((r) => {
-    const ts = r?.date?.getTime?.();
-    if (!Number.isFinite(ts)) return;
-    const key = `${ts}|${String(r.country || "").toUpperCase()}|${String(r.category || "").toUpperCase()}|${String(r.event || "").toUpperCase()}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push(r);
+    const key = macroRowKey(r);
+    if (!key) return;
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, r);
+      return;
+    }
+    map.set(key, {
+      ...prev,
+      ...r,
+      previous: preferMacroFilled(prev.previous, r.previous),
+      forecast: preferMacroFilled(prev.forecast, r.forecast),
+      actual: preferMacroFilled(prev.actual, r.actual),
+      source: isMacroValueFilled(r.actual) && !isMacroValueFilled(prev.actual)
+        ? r.source || prev.source
+        : prev.source || r.source,
+    });
   });
-  return out.sort((a, b) => a.date - b.date);
+  return Array.from(map.values()).sort((a, b) => a.date - b.date);
+}
+
+function isHotMacroWindow(rows = macroState.rows) {
+  const now = Date.now();
+  return (rows || []).some((r) => {
+    const ts = r?.date?.getTime?.();
+    if (!Number.isFinite(ts)) return false;
+    const actualMissing = !isMacroValueFilled(r.actual);
+    if (ts >= now && ts - now <= MACRO_HOT_PRE_MS) return true;
+    if (ts <= now && now - ts <= MACRO_HOT_POST_MS && actualMissing) return true;
+    return false;
+  });
+}
+
+function getMacroRefreshDelayMs() {
+  if (isHotMacroWindow()) return MACRO_REFRESH_MS_HOT;
+  if (macroState.mode === "LIVE") return MACRO_REFRESH_MS_OK;
+  return MACRO_REFRESH_MS_DEGRADED;
 }
 
 function hasFreshMacroWindow(rows) {
@@ -1667,19 +1715,15 @@ async function getPriceSeriesForAsset(assetId) {
   }
 }
 
-async function fetchCotRowsReal(asset) {
-  if (!asset?.cotMarket) throw new Error(`COT non disponibile per ${asset?.id || "asset"}`);
-  const whereExpr = `market_and_exchange_names='${asset.cotMarket}'`;
-  const url =
-    "https://publicreporting.cftc.gov/resource/6dca-aqww.json" +
-    "?$select=report_date_as_yyyy_mm_dd,open_interest_all,noncomm_positions_long_all,noncomm_positions_short_all,comm_positions_long_all,comm_positions_short_all,nonrept_positions_long_all,nonrept_positions_short_all" +
-    `&$where=${encodeURIComponent(whereExpr)}` +
-    "&$order=report_date_as_yyyy_mm_dd%20DESC" +
-    "&$limit=260";
+function getCotMarketNames(asset) {
+  const names = [];
+  if (Array.isArray(asset?.cotMarkets)) names.push(...asset.cotMarkets);
+  if (asset?.cotMarket) names.push(asset.cotMarket);
+  return [...new Set(names.map((n) => String(n || "").trim()).filter(Boolean))];
+}
 
-  let raw = await fetchJsonAnyRoute(url);
-  if (!Array.isArray(raw)) throw new Error("payload COT non valido");
-  const rows = raw
+function parseCotApiRows(raw) {
+  return (Array.isArray(raw) ? raw : [])
     .map((row) => {
       const date = parseCotReportDate(row.report_date_as_yyyy_mm_dd);
       const oi = Number(row.open_interest_all);
@@ -1694,7 +1738,9 @@ async function fetchCotRowsReal(asset) {
         Number.isNaN(date.getTime()) ||
         ![oi, commercialLong, commercialShort, nonCommercialLong, nonCommercialShort, retailLong, retailShort].every(Number.isFinite) ||
         oi <= 0
-      ) return null;
+      ) {
+        return null;
+      }
       return {
         date,
         oi,
@@ -1711,8 +1757,42 @@ async function fetchCotRowsReal(asset) {
     })
     .filter(Boolean)
     .sort((a, b) => a.date - b.date);
-  if (!rows.length) throw new Error(`nessun record COT per ${asset.id}`);
-  return rows;
+}
+
+async function fetchCotRowsForMarket(marketName) {
+  const whereExpr = `market_and_exchange_names='${marketName}'`;
+  const url =
+    "https://publicreporting.cftc.gov/resource/6dca-aqww.json" +
+    "?$select=report_date_as_yyyy_mm_dd,open_interest_all,noncomm_positions_long_all,noncomm_positions_short_all,comm_positions_long_all,comm_positions_short_all,nonrept_positions_long_all,nonrept_positions_short_all" +
+    `&$where=${encodeURIComponent(whereExpr)}` +
+    "&$order=report_date_as_yyyy_mm_dd%20DESC" +
+    "&$limit=260";
+  const raw = await fetchJsonAnyRoute(url);
+  if (!Array.isArray(raw)) throw new Error("payload COT non valido");
+  return parseCotApiRows(raw);
+}
+
+async function fetchCotRowsReal(asset) {
+  const markets = getCotMarketNames(asset);
+  if (!markets.length) throw new Error(`COT non disponibile per ${asset?.id || "asset"}`);
+  let best = null;
+  let lastError = null;
+  for (const market of markets) {
+    try {
+      const rows = await fetchCotRowsForMarket(market);
+      if (!rows.length) continue;
+      const latestMs = rows[rows.length - 1]?.date?.getTime?.() || 0;
+      if (!best || latestMs > best.latestMs) best = { rows, market, latestMs };
+      // Nome CFTC fresco: stop early.
+      if (Date.now() - latestMs <= 45 * 24 * 60 * 60 * 1000) {
+        return rows;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (best?.rows?.length) return best.rows;
+  throw lastError || new Error(`nessun record COT per ${asset.id}`);
 }
 
 async function getCotRowsForAsset(assetId) {
@@ -1743,7 +1823,7 @@ async function getCotRowsForAsset(assetId) {
   }
 }
 
-async function fetchMacroFromSources(preferredSource) {
+async function fetchMacroFromSources(preferredSource, { hot = false } = {}) {
   const sources = [
     {
       name: "TradingEconomics-G8",
@@ -1854,14 +1934,18 @@ async function fetchMacroFromSources(preferredSource) {
         usedSources.push(`${source.name}:${rows.length}`);
         const deduped = dedupeMacroRows(mergedRows);
         if (hasFreshMacroWindow(deduped) && deduped.length >= 12) {
-          return {
-            ok: true,
-            rows: deduped,
-            source: `Live merge ${usedSources.join(" + ")} (${deduped.length} eventi)`,
-            primarySource: source.name,
-            mode: "LIVE",
-            errors,
-          };
+          const hasFairEconomy = usedSources.some((s) => s.startsWith("FairEconomy"));
+          // In finestra hot (dato in uscita) unisci anche FairEconomy per catturare l'actual prima.
+          if (!hot || hasFairEconomy) {
+            return {
+              ok: true,
+              rows: deduped,
+              source: `Live merge ${usedSources.join(" + ")} (${deduped.length} eventi)`,
+              primarySource: usedSources[0]?.split(":")[0] || source.name,
+              mode: "LIVE",
+              errors,
+            };
+          }
         }
       } else {
         errors.push(`${source.name}:0`);
@@ -1940,16 +2024,19 @@ function readMacroCache() {
 
 async function refreshMacroData() {
   macroState.lastAttemptAt = Date.now();
-  const result = await fetchMacroFromSources(macroState.preferredSource);
+  const hot = isHotMacroWindow();
+  const result = await fetchMacroFromSources(macroState.preferredSource, { hot });
   if (result.ok && result.rows.length) {
-    macroState.rows = result.rows;
+    // Conserva actual già usciti se una fonte li perde temporaneamente.
+    const merged = dedupeMacroRows([...(macroState.rows || []), ...result.rows]);
+    macroState.rows = merged;
     macroState.source = result.source;
     macroState.mode = result.mode;
     macroState.preferredSource = result.primarySource || macroState.preferredSource;
     macroState.lastRefreshAt = Date.now();
     macroState.lastLiveSuccessAt = Date.now();
     macroState.errors = result.errors || [];
-    writeMacroCache(result.rows, result.source, result.mode);
+    writeMacroCache(merged, result.source, result.mode);
     return;
   }
 
@@ -1979,8 +2066,7 @@ function startMacroScheduler() {
       macroState.mode = "DOWN";
       macroState.lastRefreshAt = Date.now();
     } finally {
-      const nextDelay = macroState.mode === "LIVE" ? MACRO_REFRESH_MS_OK : MACRO_REFRESH_MS_DEGRADED;
-      setTimeout(loop, nextDelay);
+      setTimeout(loop, getMacroRefreshDelayMs());
     }
   };
   loop();
