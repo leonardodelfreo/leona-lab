@@ -2194,10 +2194,15 @@ function serveStatic(req, res, pathname) {
       : ext === ".ico" ? "image/x-icon"
       : "application/octet-stream";
     const cacheControl =
-      ext === ".html" || ext === ".xml" || ext === ".txt" ? "public, max-age=300"
-      : "public, max-age=86400";
+      ext === ".html" || ext === ".xml" || ext === ".txt"
+        ? "no-cache, no-store, must-revalidate"
+        : "public, max-age=86400";
     applySecurityHeaders(res);
-    res.writeHead(200, { "Content-Type": mime, "Cache-Control": cacheControl });
+    res.writeHead(200, {
+      "Content-Type": mime,
+      "Content-Length": content.length,
+      "Cache-Control": cacheControl,
+    });
     res.end(content);
   });
 }
