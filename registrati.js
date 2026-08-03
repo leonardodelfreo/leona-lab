@@ -112,10 +112,8 @@ async function doRegister() {
     setStatus("Inserisci email e password", "down");
     return;
   }
-  if (requirePayment && !checkoutSessionId && !adminFreeAccess) {
-    setStatus("Completa prima il pagamento da /prezzi", "down");
-    return;
-  }
+  // Il server decide: pagamento Stripe verificato oppure email admin whitelist.
+
   setStatus("Creazione account...");
   try {
     const payload = await apiJson("/api/auth/register", {

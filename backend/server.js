@@ -2134,6 +2134,7 @@ function isAllowedPublicStatic(relativePath) {
     "registrati.html",
     "privacy.html",
     "termini.html",
+    "assistenza.html",
     "index.html",
     "app.js",
     "login.js",
@@ -2229,6 +2230,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (pathname === "/termini" || pathname === "/termini/" || pathname === "/terms" || pathname === "/terms/") {
     return serveStatic(req, res, "/termini.html");
+  }
+  if (pathname === "/assistenza" || pathname === "/assistenza/" || pathname === "/support" || pathname === "/support/") {
+    return serveStatic(req, res, "/assistenza.html");
   }
   if (pathname === "/app" || pathname === "/app/") {
     return serveStatic(req, res, "/index.html");
