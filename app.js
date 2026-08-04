@@ -279,6 +279,7 @@ const state = {
   valuationCompCache: {},
   valuationChart: null,
   valuationIsLoading: false,
+  valuationPrefetchStarted: false,
   lastExternalNotifyAt: {},
   lastJournalKey: null,
   currentQualityScore: 70,
@@ -312,6 +313,7 @@ const CACHE_KEYS = {
   PRICE: "xau_dashboard_price_v1",
   COT: "xau_dashboard_cot_v2",
   MACRO: "xau_dashboard_macro_v1",
+  VALUATION_COMPS: "xau_dashboard_valuation_comps_v1",
 };
 
 const PREFS_KEY = "xau_dashboard_prefs_v1";
@@ -1263,9 +1265,11 @@ async function fetchBootstrapFromBackend(asset) {
   };
 }
 
-async function fetchPriceSeriesFromBackend(asset) {
+async function fetchPriceSeriesFromBackend(asset, { force = false } = {}) {
   const base = getMacroBackendBaseUrl();
-  const url = `${base}/api/price/series?asset=${encodeURIComponent(asset?.id || "XAUUSD")}&t=${Date.now()}`;
+  const forceQ = force ? "&force=1" : "";
+  const bust = force ? `&t=${Date.now()}` : "";
+  const url = `${base}/api/price/series?asset=${encodeURIComponent(asset?.id || "XAUUSD")}${forceQ}${bust}`;
   const payload = await fetchJsonWithAuth(url);
   if (!payload || !Array.isArray(payload.prices) || !payload.prices.length) {
     throw new Error(payload?.source || "backend prezzi vuoto");
@@ -2044,11 +2048,11 @@ function getFilteredCot(cotData, timeframe) {
   return filtered.length >= 8 ? filtered : cotData.slice(-8);
 }
 
-async function getPriceSeries(asset) {
+async function getPriceSeries(asset, { force = false } = {}) {
   const knownInCatalog = ASSET_CATALOG.some((a) => a.id === asset?.id);
   if (knownInCatalog) {
     try {
-      return await fetchPriceSeriesFromBackend(asset);
+      return await fetchPriceSeriesFromBackend(asset, { force });
     } catch (error) {
       if (error?.status === 401 || error?.status === 403) throw error;
       // fallback client-side if backend is offline
@@ -5295,6 +5299,8 @@ function renderDashboard() {
   }
   if (state.activePage === "valuation") {
     loadValuationAndRender({ force: false }).catch(() => {});
+  } else {
+    prefetchValuationComps();
   }
 }
 
@@ -5724,31 +5730,139 @@ function updateValuationChart(dates, rescaledSeries, labels, colorIndexes = null
 }
 
 async function ensureValuationCompSeries(compIds, { force = false } = {}) {
-  const unique = [...new Set((compIds || []).map((id) => String(id || "").toUpperCase()))];
+  const selectedId = String(state.selectedAssetId || "").toUpperCase();
+  const unique = [...new Set((compIds || []).map((id) => String(id || "").toUpperCase()).filter(Boolean))];
   const results = {};
-  await Promise.all(
-    unique.map(async (id) => {
-      if (!force && state.valuationCompCache[id]?.prices?.length) {
-        results[id] = state.valuationCompCache[id];
-        return;
-      }
-      const asset = getValuationCompAsset(id);
-      try {
-        const series = await getPriceSeries(asset);
-        const payload = {
+
+  const persistComps = () => {
+    try {
+      const toSave = {};
+      Object.entries(state.valuationCompCache || {}).forEach(([id, payload]) => {
+        if (!payload?.prices?.length) return;
+        toSave[id] = {
           id,
-          label: asset.label,
-          prices: series?.prices || [],
-          source: series?.source || "--",
+          label: payload.label,
+          source: payload.source,
+          fetchedAt: payload.fetchedAt || new Date().toISOString(),
+          prices: payload.prices.map((p) => ({
+            date: p.date instanceof Date ? p.date.toISOString() : p.date,
+            close: p.close,
+          })),
         };
-        state.valuationCompCache[id] = payload;
-        results[id] = payload;
-      } catch (error) {
-        results[id] = { id, label: asset.label, prices: [], source: `errore: ${error.message}` };
+      });
+      saveCache(CACHE_KEYS.VALUATION_COMPS, { fetchedAt: new Date().toISOString(), series: toSave });
+    } catch {
+      // ignore
+    }
+  };
+
+  const hydrateFromDisk = () => {
+    if (force) return;
+    const cached = loadCache(CACHE_KEYS.VALUATION_COMPS, PRICE_CACHE_MAX_AGE_MS);
+    const series = cached?.series || {};
+    Object.entries(series).forEach(([id, payload]) => {
+      if (state.valuationCompCache[id]?.prices?.length) return;
+      const prices = (payload?.prices || [])
+        .map((p) => ({ date: new Date(p.date), close: Number(p.close) }))
+        .filter((p) => p.date instanceof Date && !Number.isNaN(p.date.getTime()) && Number.isFinite(p.close));
+      if (prices.length < 200) return;
+      state.valuationCompCache[id] = {
+        id,
+        label: payload.label || id,
+        source: `${payload.source || "cache locale"} (cache)`,
+        prices,
+        fetchedAt: payload.fetchedAt || cached.fetchedAt,
+      };
+    });
+  };
+
+  hydrateFromDisk();
+
+  const missing = [];
+  for (const id of unique) {
+    if (id === selectedId && state.priceData?.prices?.length) {
+      const asset = getValuationCompAsset(id);
+      const payload = {
+        id,
+        label: asset.label,
+        prices: state.priceData.prices,
+        source: state.priceData.source || "asset selezionato",
+        fetchedAt: new Date().toISOString(),
+      };
+      state.valuationCompCache[id] = payload;
+      results[id] = payload;
+      continue;
+    }
+    if (!force && state.valuationCompCache[id]?.prices?.length) {
+      results[id] = state.valuationCompCache[id];
+      continue;
+    }
+    missing.push(id);
+  }
+
+  if (missing.length) {
+    try {
+      const base = getMacroBackendBaseUrl();
+      const forceQ = force ? "&force=1" : "";
+      const url = `${base}/api/price/series/batch?assets=${encodeURIComponent(missing.join(","))}${forceQ}`;
+      const payload = await fetchJsonWithAuth(url);
+      const seriesMap = payload?.series || {};
+      for (const id of missing) {
+        const asset = getValuationCompAsset(id);
+        const row = seriesMap[id];
+        const prices = (row?.prices || [])
+          .map((p) => ({ date: parseMacroDate(p.date), close: Number(p.close) }))
+          .filter((p) => p.date instanceof Date && !Number.isNaN(p.date.getTime()) && Number.isFinite(p.close))
+          .sort((a, b) => a.date - b.date);
+        if (prices.length >= 200) {
+          const packed = {
+            id,
+            label: asset.label,
+            prices,
+            source: `Backend ${row?.mode || "LIVE"} | ${row?.source || "prezzi"}`,
+            fetchedAt: new Date().toISOString(),
+          };
+          state.valuationCompCache[id] = packed;
+          results[id] = packed;
+        } else {
+          results[id] = { id, label: asset.label, prices: [], source: row?.source || "storico insufficiente" };
+        }
       }
-    })
-  );
+      persistComps();
+    } catch (batchError) {
+      await Promise.all(
+        missing.map(async (id) => {
+          const asset = getValuationCompAsset(id);
+          try {
+            const series = await getPriceSeries(asset, { force });
+            const packed = {
+              id,
+              label: asset.label,
+              prices: series?.prices || [],
+              source: series?.source || "--",
+              fetchedAt: new Date().toISOString(),
+            };
+            state.valuationCompCache[id] = packed;
+            results[id] = packed;
+          } catch (error) {
+            results[id] = { id, label: asset.label, prices: [], source: `errore: ${error.message}` };
+          }
+        })
+      );
+      persistComps();
+    }
+  }
+
   return results;
+}
+
+function prefetchValuationComps() {
+  if (state.valuationPrefetchStarted) return;
+  state.valuationPrefetchStarted = true;
+  const ids = state.valuationCompIds || ["DXY", "XAUUSD", "ZB1"];
+  ensureValuationCompSeries(ids, { force: false }).catch(() => {
+    state.valuationPrefetchStarted = false;
+  });
 }
 
 async function loadValuationAndRender({ force = false } = {}) {
@@ -6144,7 +6258,7 @@ function wireEvents() {
         valuationComp2El?.value || "XAUUSD",
         valuationComp3El?.value || "ZB1",
       ];
-      loadValuationAndRender({ force: true }).catch(() => {});
+      loadValuationAndRender({ force: false }).catch(() => {});
       savePrefs();
     });
   });

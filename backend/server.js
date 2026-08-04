@@ -92,6 +92,8 @@ const MACRO_HOT_PRE_MS = 10 * 60 * 1000;
 const MACRO_HOT_POST_MS = 45 * 60 * 1000;
 const MACRO_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const PRICE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** Serve disk cache immediately if fresher than this (avoids Yahoo round-trips on every Valuation open). */
+const PRICE_SOFT_TTL_MS = 20 * 60 * 1000;
 const COT_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 const ASSET_CATALOG = [
@@ -1852,8 +1854,25 @@ function normalizeMarketSnapshot(snap) {
   };
 }
 
-async function getPriceSeriesForAsset(assetId) {
+async function getPriceSeriesForAsset(assetId, { force = false } = {}) {
   const asset = getAssetById(assetId);
+  const cached = readJsonCache(getPriceCacheFile(asset.id), PRICE_CACHE_MAX_AGE_MS);
+  if (!force && cached?.prices?.length >= 200) {
+    const fetchedAt = Date.parse(cached.fetchedAt || 0);
+    const age = Date.now() - fetchedAt;
+    if (Number.isFinite(age) && age >= 0 && age < PRICE_SOFT_TTL_MS) {
+      return {
+        ok: true,
+        mode: "CACHE",
+        source: `${cached.source || "price cache"} (soft cache)`,
+        snapshot: normalizeMarketSnapshot(cached.snapshot),
+        prices: cached.prices
+          .map((p) => ({ date: parseMacroDate(p.date), close: Number(p.close) }))
+          .filter((p) => p.date instanceof Date && !Number.isNaN(p.date.getTime()) && Number.isFinite(p.close)),
+        assetId: asset.id,
+      };
+    }
+  }
   try {
     const data = await fetchPriceSeriesReal(asset);
     const snapshot = normalizeMarketSnapshot(data.snapshot);
@@ -1866,7 +1885,6 @@ async function getPriceSeriesForAsset(assetId) {
     });
     return { ok: true, ...data, snapshot, assetId: asset.id };
   } catch (error) {
-    const cached = readJsonCache(getPriceCacheFile(asset.id), PRICE_CACHE_MAX_AGE_MS);
     if (cached?.prices?.length) {
       return {
         ok: true,
@@ -3023,7 +3041,8 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/price/series") {
     if (!requireAppAccess(req, res)) return;
     const assetId = requestUrl.searchParams.get("asset") || "XAUUSD";
-    const result = await getPriceSeriesForAsset(assetId);
+    const force = requestUrl.searchParams.get("force") === "1";
+    const result = await getPriceSeriesForAsset(assetId, { force });
     return json(res, 200, {
       ok: result.ok,
       mode: result.mode,
@@ -3035,6 +3054,35 @@ const server = http.createServer(async (req, res) => {
         close: p.close,
       })),
     });
+  }
+
+  if (pathname === "/api/price/series/batch") {
+    if (!requireAppAccess(req, res)) return;
+    const force = requestUrl.searchParams.get("force") === "1";
+    const assets = String(requestUrl.searchParams.get("assets") || "")
+      .split(",")
+      .map((id) => String(id || "").trim().toUpperCase())
+      .filter(Boolean)
+      .slice(0, 6);
+    const unique = [...new Set(assets.length ? assets : ["DXY", "ZB1"])];
+    const series = {};
+    await Promise.all(
+      unique.map(async (assetId) => {
+        const result = await getPriceSeriesForAsset(assetId, { force });
+        series[assetId] = {
+          ok: result.ok,
+          mode: result.mode,
+          source: result.source,
+          assetId: result.assetId,
+          snapshot: result.snapshot || null,
+          prices: (result.prices || []).map((p) => ({
+            date: p.date?.toISOString?.() || null,
+            close: p.close,
+          })),
+        };
+      })
+    );
+    return json(res, 200, { ok: true, series });
   }
 
   if (pathname === "/api/cot/report") {
@@ -3134,6 +3182,10 @@ server.listen(PORT, HOST, () => {
   if (STRIPE_SECRET_KEY && !RESEND_API_KEY) {
     console.warn("[server] WARNING: RESEND_API_KEY missing — purchase emails disabled");
   }
+  // Warm Valuation comps so first tab open is fast.
+  setTimeout(() => {
+    Promise.all(["XAUUSD", "DXY", "ZB1"].map((id) => getPriceSeriesForAsset(id).catch(() => null))).catch(() => {});
+  }, 2500);
 });
 
 process.on("SIGTERM", () => {
