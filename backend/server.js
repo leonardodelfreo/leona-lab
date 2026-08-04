@@ -1364,6 +1364,172 @@ function preferMacroFilled(oldVal, newVal) {
   return "--";
 }
 
+function normalizeMacroEventName(event) {
+  return String(event || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function macroCalendarDayNy(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function macroSoftKey(r) {
+  const day = macroCalendarDayNy(r?.date);
+  const country = String(r?.country || "").toUpperCase();
+  const event = normalizeMacroEventName(r?.event);
+  if (!day || !country || !event) return null;
+  return `${day}|${country}|${event}`;
+}
+
+function getForexFactoryWeekParam(d = new Date()) {
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
+  const parts = Object.fromEntries(
+    fmt
+      .formatToParts(d)
+      .filter((p) => p.type !== "literal")
+      .map((p) => [p.type, p.value])
+  );
+  const y = Number(parts.year);
+  const m = Number(parts.month);
+  const day = Number(parts.day);
+  const utcNoon = Date.UTC(y, m - 1, day, 12);
+  const dow = new Date(utcNoon).getUTCDay();
+  const sun = new Date(Date.UTC(y, m - 1, day - dow, 12));
+  return `${months[sun.getUTCMonth()]}${sun.getUTCDate()}.${sun.getUTCFullYear()}`;
+}
+
+function cleanForexFactoryCell(value) {
+  return String(value || "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/<[^>]+>/g, "")
+    .trim();
+}
+
+/** Parse Forex Factory calendar markdown (via jina) that includes Actual column. */
+function parseForexFactoryMarkdown(md, yearHint = new Date().getFullYear()) {
+  const lines = String(md || "").split(/\n/);
+  let currentDay = null;
+  let year = yearHint;
+  const ym = String(md || "").match(/week=([a-z]+)(\d+)\.(\d{4})/i);
+  if (ym) year = Number(ym[3]);
+  const monthMap = {
+    jan: 0,
+    feb: 1,
+    mar: 2,
+    apr: 3,
+    may: 4,
+    jun: 5,
+    jul: 6,
+    aug: 7,
+    sep: 8,
+    oct: 9,
+    nov: 10,
+    dec: 11,
+  };
+  const out = [];
+  for (const line of lines) {
+    if (!line.includes("|")) continue;
+    if (/Date\s*\|/.test(line) || /^\|\s*-+/.test(line)) continue;
+    const cells = line.split("|").map((c) => c.trim());
+    if (cells.length < 8) continue;
+
+    let dayCell = cleanForexFactoryCell(cells[1]);
+    let time = cleanForexFactoryCell(cells[2]);
+    let ccy = cleanForexFactoryCell(cells[3]).toUpperCase();
+    let titleIdx = 5;
+    let actualIdx = 8;
+    let forecastIdx = 9;
+    let prevIdx = 10;
+
+    const dayMatch = dayCell.match(/(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)?\s*([A-Za-z]{3})\s+(\d{1,2})/i);
+    if (dayMatch) {
+      currentDay = { m: monthMap[dayMatch[1].toLowerCase()], d: Number(dayMatch[2]) };
+    }
+
+    if (/^\d{1,2}:\d{2}(am|pm)$/i.test(dayCell) || /^All Day$/i.test(dayCell)) {
+      time = dayCell;
+      ccy = cleanForexFactoryCell(cells[2]).toUpperCase();
+      titleIdx = 4;
+      actualIdx = 7;
+      forecastIdx = 8;
+      prevIdx = 9;
+    }
+
+    const title = cleanForexFactoryCell(cells[titleIdx]);
+    if (!title || !TRACKED_MACRO_CURRENCY_SET.has(ccy)) continue;
+    if (!currentDay) continue;
+
+    const actual = cleanForexFactoryCell(cells[actualIdx]);
+    const forecast = cleanForexFactoryCell(cells[forecastIdx]);
+    const previous = cleanForexFactoryCell(cells[prevIdx]);
+
+    let hours = 12;
+    let minutes = 0;
+    const tm = String(time || "").match(/^(\d{1,2}):(\d{2})(am|pm)$/i);
+    if (tm) {
+      hours = Number(tm[1]) % 12;
+      if (String(tm[3]).toLowerCase() === "pm") hours += 12;
+      minutes = Number(tm[2]);
+    }
+    // Rough NY DST: Mar-Nov EDT (-04), else EST (-05).
+    const offset = currentDay.m >= 2 && currentDay.m <= 10 ? "-04:00" : "-05:00";
+    const iso = `${year}-${String(currentDay.m + 1).padStart(2, "0")}-${String(currentDay.d).padStart(2, "0")}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00${offset}`;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) continue;
+    out.push({
+      date,
+      country: ccy,
+      event: title,
+      category: normalizeMacroCategory(title),
+      impact: "low",
+      previous: previous || "--",
+      forecast: forecast || "--",
+      actual: actual || "--",
+      source: "ForexFactory",
+    });
+  }
+  return out;
+}
+
+function enrichMacroActuals(baseRows, donorRows) {
+  const donors = new Map();
+  (donorRows || []).forEach((r) => {
+    const key = macroSoftKey(r);
+    if (!key) return;
+    const prev = donors.get(key);
+    if (!prev || (isMacroValueFilled(r.actual) && !isMacroValueFilled(prev.actual))) {
+      donors.set(key, r);
+    }
+  });
+  return (baseRows || []).map((r) => {
+    const donor = donors.get(macroSoftKey(r));
+    if (!donor) return r;
+    const gotActual = isMacroValueFilled(donor.actual) && !isMacroValueFilled(r.actual);
+    return {
+      ...r,
+      previous: preferMacroFilled(r.previous, donor.previous),
+      forecast: preferMacroFilled(r.forecast, donor.forecast),
+      actual: preferMacroFilled(r.actual, donor.actual),
+      source: gotActual ? donor.source || r.source : r.source,
+    };
+  });
+}
+
 function macroRowKey(r) {
   const ts = r?.date?.getTime?.();
   if (!Number.isFinite(ts)) return null;
@@ -1926,6 +2092,20 @@ async function fetchMacroFromSources(preferredSource, { hot = false } = {}) {
         })), "AlphaVantage-Calendar", url);
       },
     },
+    {
+      name: "ForexFactory-Actuals",
+      // FairEconomy JSON non include "actual". Forex Factory (via text/jina) sì.
+      url: `https://www.forexfactory.com/calendar?week=${getForexFactoryWeekParam(new Date())}`,
+      fetchMode: "text",
+      parser: (raw, url) => {
+        const rows = parseForexFactoryMarkdown(String(raw || ""), new Date().getFullYear());
+        return normalizeMacroRows(
+          rows.map((r) => ({ ...r, source: url })),
+          "ForexFactory-Actuals",
+          url
+        );
+      },
+    },
   ];
 
   const orderedSources = preferredSource
@@ -1934,23 +2114,47 @@ async function fetchMacroFromSources(preferredSource, { hot = false } = {}) {
   const mergedRows = [];
   const usedSources = [];
   const errors = [];
+  let ffActualRows = [];
 
   for (const source of orderedSources) {
     try {
-      const payload = await fetchJsonAnyRoute(source.url);
+      const payload =
+        source.fetchMode === "text"
+          ? await fetchTextAnyRoute(source.url)
+          : await fetchJsonAnyRoute(source.url);
       const rows = source.parser(payload, source.url);
       if (rows.length) {
+        if (source.name === "ForexFactory-Actuals") {
+          ffActualRows = rows;
+          usedSources.push(`${source.name}:${rows.length}`);
+          continue;
+        }
         mergedRows.push(...rows);
         usedSources.push(`${source.name}:${rows.length}`);
-        const deduped = dedupeMacroRows(mergedRows);
+        const deduped = enrichMacroActuals(dedupeMacroRows(mergedRows), ffActualRows);
         if (hasFreshMacroWindow(deduped) && deduped.length >= 12) {
           const hasFairEconomy = usedSources.some((s) => s.startsWith("FairEconomy"));
-          // In finestra hot (dato in uscita) unisci anche FairEconomy per catturare l'actual prima.
-          if (!hot || hasFairEconomy) {
+          // Prima di uscire, arricchisci sempre gli actual da Forex Factory.
+          if (!ffActualRows.length) {
+            const ffSource = sources.find((s) => s.name === "ForexFactory-Actuals");
+            if (ffSource) {
+              try {
+                const ffPayload = await fetchTextAnyRoute(ffSource.url);
+                ffActualRows = ffSource.parser(ffPayload, ffSource.url);
+                if (ffActualRows.length) usedSources.push(`ForexFactory-Actuals:${ffActualRows.length}`);
+              } catch (error) {
+                errors.push(`ForexFactory-Actuals:${error?.message || "error"}`);
+              }
+            }
+          }
+          const enriched = enrichMacroActuals(deduped, ffActualRows);
+          const hasFfActuals = ffActualRows.some((r) => isMacroValueFilled(r.actual));
+          // In hot window attendi FairEconomy/FF per catturare l'actual.
+          if (!hot || hasFairEconomy || hasFfActuals) {
             return {
               ok: true,
-              rows: deduped,
-              source: `Live merge ${usedSources.join(" + ")} (${deduped.length} eventi)`,
+              rows: enriched,
+              source: `Live merge ${usedSources.join(" + ")} (${enriched.length} eventi)`,
               primarySource: usedSources[0]?.split(":")[0] || source.name,
               mode: "LIVE",
               errors,
@@ -1965,7 +2169,20 @@ async function fetchMacroFromSources(preferredSource, { hot = false } = {}) {
     }
   }
 
-  const deduped = dedupeMacroRows(mergedRows);
+  if (!ffActualRows.length) {
+    const ffSource = sources.find((s) => s.name === "ForexFactory-Actuals");
+    if (ffSource) {
+      try {
+        const payload = await fetchTextAnyRoute(ffSource.url);
+        ffActualRows = ffSource.parser(payload, ffSource.url);
+        if (ffActualRows.length) usedSources.push(`ForexFactory-Actuals:${ffActualRows.length}`);
+      } catch (error) {
+        errors.push(`ForexFactory-Actuals:${error?.message || "error"}`);
+      }
+    }
+  }
+
+  const deduped = enrichMacroActuals(dedupeMacroRows(mergedRows), ffActualRows);
   if (deduped.length) {
     return {
       ok: true,
