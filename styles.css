@@ -1573,6 +1573,54 @@ th {
   padding-right: 2px;
 }
 
+#valuationPage.page-view.active {
+  display: block;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.valuation-note {
+  margin: 0 0 0.75rem;
+  line-height: 1.45;
+}
+
+.valuation-chart-panel {
+  overflow: hidden;
+}
+
+.valuation-chart-wrap {
+  position: relative;
+  width: 100%;
+  height: clamp(380px, 52vh, 560px);
+  max-height: 560px;
+  overflow: hidden;
+}
+
+.valuation-chart-panel canvas,
+#valuationChart {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 560px;
+}
+
+.valuation-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  flex: 0 0 auto;
+  margin: 8px 0;
+}
+
+.valuation-kpi-grid .kpi-value.val-over {
+  color: #c45c26;
+}
+
+.valuation-kpi-grid .kpi-value.val-under {
+  color: #2f6fed;
+}
+
+.valuation-kpi-grid .kpi-value.val-neutral {
+  color: inherit;
+}
+
 #signalPage .card {
   margin-bottom: 10px;
 }
@@ -1670,6 +1718,10 @@ th {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .valuation-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .bias-strip {
     grid-template-columns: 1fr;
   }
@@ -1744,6 +1796,11 @@ th {
   }
 
   #macroPage.page-view.active {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  #valuationPage.page-view.active {
     overflow: visible;
     padding-right: 0;
   }

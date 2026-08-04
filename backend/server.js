@@ -132,6 +132,8 @@ const ASSET_CATALOG = [
   { id: "COTTON", yahooSymbols: ["CT=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CT1!" }], cotMarket: "COTTON NO. 2 - ICE FUTURES U.S." },
   { id: "COCOA", yahooSymbols: ["CC=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CC1!" }], cotMarket: "COCOA - ICE FUTURES U.S." },
   { id: "OATS", yahooSymbols: ["ZO=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZO1!" }], cotMarket: "OATS - CHICAGO BOARD OF TRADE" },
+  // Valuation comparable (ZB1! / US Treasury bond futures). Not shown in main asset picker.
+  { id: "ZB1", yahooSymbols: ["ZB=F", "ZN=F", "TLT"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZB1!" }], cotMarket: null },
 ];
 
 const macroState = {

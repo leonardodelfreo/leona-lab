@@ -20,10 +20,26 @@ const tabCotEl = document.getElementById("tabCot");
 const tabSeasonalityEl = document.getElementById("tabSeasonality");
 const tabSignalsEl = document.getElementById("tabSignals");
 const tabMacroEl = document.getElementById("tabMacro");
+const tabValuationEl = document.getElementById("tabValuation");
 const cotPageEl = document.getElementById("cotPage");
 const seasonalityPageEl = document.getElementById("seasonalityPage");
 const signalPageEl = document.getElementById("signalPage");
 const macroPageEl = document.getElementById("macroPage");
+const valuationPageEl = document.getElementById("valuationPage");
+const valuationPeriodLengthEl = document.getElementById("valuationPeriodLength");
+const valuationRescaleLengthEl = document.getElementById("valuationRescaleLength");
+const valuationComp1El = document.getElementById("valuationComp1");
+const valuationComp2El = document.getElementById("valuationComp2");
+const valuationComp3El = document.getElementById("valuationComp3");
+const valuationRefreshBtn = document.getElementById("valuationRefreshBtn");
+const valuationSourceInfoEl = document.getElementById("valuationSourceInfo");
+const valuationKpi1El = document.getElementById("valuationKpi1");
+const valuationKpi2El = document.getElementById("valuationKpi2");
+const valuationKpi3El = document.getElementById("valuationKpi3");
+const valuationKpi1LabelEl = document.getElementById("valuationKpi1Label");
+const valuationKpi2LabelEl = document.getElementById("valuationKpi2Label");
+const valuationKpi3LabelEl = document.getElementById("valuationKpi3Label");
+const valuationBiasEl = document.getElementById("valuationBias");
 const seasonalityYearsEl = document.getElementById("seasonalityYears");
 const seasonalityModeEl = document.getElementById("seasonalityMode");
 const seasonalityTraceModeEl = document.getElementById("seasonalityTraceMode");
@@ -172,7 +188,34 @@ const ASSET_CATALOG = [
   { id: "COTTON", label: "Cotton", group: "Agriculture", yahooSymbols: ["CT=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CT1!" }], cotMarket: "COTTON NO. 2 - ICE FUTURES U.S." },
   { id: "COCOA", label: "Cocoa", group: "Agriculture", yahooSymbols: ["CC=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CC1!" }], cotMarket: "COCOA - ICE FUTURES U.S." },
   { id: "OATS", label: "Oats", group: "Agriculture", yahooSymbols: ["ZO=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZO1!" }], cotMarket: "OATS - CHICAGO BOARD OF TRADE" },
+  // Hidden from picker groups; used by Valuation tab comps (backend price series).
+  { id: "ZB1", label: "US Treasury Bond Futures", group: "_valuation", yahooSymbols: ["ZB=F", "ZN=F", "TLT"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZB1!" }], cotMarket: null },
 ];
+
+/** Comparables for Supreme Valuation (TradingView defaults: DXY, GC1!, ZB1!). */
+const VALUATION_COMP_ASSETS = {
+  DXY: {
+    id: "DXY",
+    label: "DXY",
+    yahooSymbols: ["DX-Y.NYB", "DX=F"],
+    tvFeeds: [{ market: "cfd", ticker: "TVC:DXY" }, { market: "futures", ticker: "ICEUS:DX1!" }],
+  },
+  XAUUSD: {
+    id: "XAUUSD",
+    label: "Gold (GC1!)",
+    yahooSymbols: ["GC=F", "XAUUSD=X"],
+    stooqSymbol: "xauusd",
+    tvFeeds: [{ market: "cfd", ticker: "TVC:GOLD" }, { market: "forex", ticker: "OANDA:XAUUSD" }],
+  },
+  ZB1: {
+    id: "ZB1",
+    label: "Bonds (ZB1!)",
+    yahooSymbols: ["ZB=F", "ZN=F", "TLT"],
+    tvFeeds: [{ market: "futures", ticker: "CBOT:ZB1!" }],
+  },
+};
+
+const VALUATION_LINE_COLORS = ["#1f3a8a", "#d4af37", "#7c3aed"];
 
 const PRICE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const COT_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -230,6 +273,12 @@ const state = {
   macroIsLoading: false,
   macroWatcherId: null,
   macroActualJustUpdated: false,
+  valuationPeriodLength: 10,
+  valuationRescaleLength: 100,
+  valuationCompIds: ["DXY", "XAUUSD", "ZB1"],
+  valuationCompCache: {},
+  valuationChart: null,
+  valuationIsLoading: false,
   lastExternalNotifyAt: {},
   lastJournalKey: null,
   currentQualityScore: 70,
@@ -405,6 +454,9 @@ function buildPrefsSnapshot() {
     seasonalityMode: state.seasonalityMode,
     seasonalityStartMonth: state.seasonalityStartMonth,
     seasonalityHorizon: state.seasonalityHorizon,
+    valuationPeriodLength: state.valuationPeriodLength,
+    valuationRescaleLength: state.valuationRescaleLength,
+    valuationCompIds: state.valuationCompIds,
     cotCategory: state.cotChartCategory,
     cotMetric: state.cotMetric,
     cotLookback: state.cotLookback,
@@ -623,8 +675,9 @@ function getAssetById(assetId) {
 }
 
 function getAssetsByGroup(group = "ALL") {
-  if (!group || group === "ALL") return ASSET_CATALOG.slice();
-  return ASSET_CATALOG.filter((a) => a.group === group);
+  const visible = ASSET_CATALOG.filter((a) => a.group !== "_valuation");
+  if (!group || group === "ALL") return visible;
+  return visible.filter((a) => a.group === group);
 }
 
 function getSelectedAsset() {
@@ -1992,11 +2045,14 @@ function getFilteredCot(cotData, timeframe) {
 }
 
 async function getPriceSeries(asset) {
-  try {
-    return await fetchPriceSeriesFromBackend(asset);
-  } catch (error) {
-    if (error?.status === 401 || error?.status === 403) throw error;
-    // fallback client-side if backend is offline
+  const knownInCatalog = ASSET_CATALOG.some((a) => a.id === asset?.id);
+  if (knownInCatalog) {
+    try {
+      return await fetchPriceSeriesFromBackend(asset);
+    } catch (error) {
+      if (error?.status === 401 || error?.status === 403) throw error;
+      // fallback client-side if backend is offline
+    }
   }
   const historicalCandidates = [];
 
@@ -4803,6 +4859,9 @@ function renderDashboard() {
     if (state.activePage === "macro") {
       renderMacroCalendar();
     }
+    if (state.activePage === "valuation") {
+      loadValuationAndRender({ force: false }).catch(() => {});
+    }
     statusEl.textContent = "In attesa di dati live reali...";
     return;
   }
@@ -5234,6 +5293,9 @@ function renderDashboard() {
   if (state.activePage === "macro") {
     renderMacroCalendar();
   }
+  if (state.activePage === "valuation") {
+    loadValuationAndRender({ force: false }).catch(() => {});
+  }
 }
 
 function scheduleRender() {
@@ -5416,20 +5478,394 @@ function setActiveTimeframe(tf) {
   savePrefs();
 }
 
+function getValuationCompAsset(compId) {
+  const key = String(compId || "").toUpperCase();
+  if (VALUATION_COMP_ASSETS[key]) return VALUATION_COMP_ASSETS[key];
+  return VALUATION_COMP_ASSETS.DXY;
+}
+
+function valuationDayKey(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function alignValuationSeries(symbolPrices, compSeriesList) {
+  const symMap = new Map();
+  (symbolPrices || []).forEach((p) => {
+    const key = valuationDayKey(p.date);
+    if (!key || !Number.isFinite(p.close) || p.close <= 0) return;
+    symMap.set(key, p.close);
+  });
+  const compMaps = (compSeriesList || []).map((series) => {
+    const m = new Map();
+    (series?.prices || []).forEach((p) => {
+      const key = valuationDayKey(p.date);
+      if (!key || !Number.isFinite(p.close) || p.close <= 0) return;
+      m.set(key, p.close);
+    });
+    return m;
+  });
+  // Require intersection only with comps that actually have data (skip empty feeds).
+  const activeMaps = compMaps.filter((m) => m.size > 0);
+  let keys = [...symMap.keys()];
+  activeMaps.forEach((m) => {
+    keys = keys.filter((k) => m.has(k));
+  });
+  keys.sort();
+  return {
+    dates: keys.map((k) => new Date(`${k}T12:00:00.000Z`)),
+    symbolCloses: keys.map((k) => symMap.get(k)),
+    // Empty comps stay null-filled so chart/KPI slots remain aligned to UI order.
+    compCloses: compMaps.map((m) => (m.size ? keys.map((k) => m.get(k)) : keys.map(() => null))),
+  };
+}
+
+/** Pine-equivalent: % change over Length, Diff vs comps, rescale -100..100 over RescaleLength. */
+function computeSupremeValuation(symbolCloses, compClosesList, periodLength, rescaleLength) {
+  const n = symbolCloses.length;
+  const period = Math.max(2, Number(periodLength) || 10);
+  const rescale = Math.max(period + 1, Number(rescaleLength) || 100);
+  const diffs = (compClosesList || []).map(() => Array(n).fill(null));
+  const rescaled = (compClosesList || []).map(() => Array(n).fill(null));
+
+  for (let i = period; i < n; i++) {
+    const sym0 = symbolCloses[i - period];
+    const sym1 = symbolCloses[i];
+    if (!Number.isFinite(sym0) || !Number.isFinite(sym1) || sym0 === 0) continue;
+    const symPerc = ((sym1 - sym0) / sym0) * 100;
+    for (let c = 0; c < compClosesList.length; c++) {
+      const c0 = compClosesList[c][i - period];
+      const c1 = compClosesList[c][i];
+      if (!Number.isFinite(c0) || !Number.isFinite(c1) || c0 === 0) continue;
+      const compPerc = ((c1 - c0) / c0) * 100;
+      diffs[c][i] = symPerc - compPerc;
+    }
+  }
+
+  for (let c = 0; c < diffs.length; c++) {
+    for (let i = 0; i < n; i++) {
+      const value = diffs[c][i];
+      if (!Number.isFinite(value)) continue;
+      const start = Math.max(0, i - rescale + 1);
+      let min = Number.POSITIVE_INFINITY;
+      let max = Number.NEGATIVE_INFINITY;
+      let count = 0;
+      for (let j = start; j <= i; j++) {
+        const v = diffs[c][j];
+        if (!Number.isFinite(v)) continue;
+        min = Math.min(min, v);
+        max = Math.max(max, v);
+        count += 1;
+      }
+      if (count < 2 || !(max > min)) {
+        rescaled[c][i] = 0;
+      } else {
+        rescaled[c][i] = ((value - min) / (max - min)) * 200 - 100;
+      }
+    }
+  }
+
+  return { diffs, rescaled, period, rescale };
+}
+
+function filterPricesByTimeframe(prices) {
+  return getFilteredPrices(prices || [], state.timeframe);
+}
+
+function setValuationKpi(el, labelEl, value, label) {
+  if (labelEl) labelEl.textContent = label || "--";
+  if (!el) return;
+  el.classList.remove("val-over", "val-under", "val-neutral");
+  if (!Number.isFinite(value)) {
+    el.textContent = "--";
+    el.classList.add("val-neutral");
+    return;
+  }
+  el.textContent = fmtNum(value, 1);
+  if (value >= 75) el.classList.add("val-over");
+  else if (value <= -75) el.classList.add("val-under");
+  else el.classList.add("val-neutral");
+}
+
+function updateValuationChart(dates, rescaledSeries, labels, colorIndexes = null) {
+  const canvas = document.getElementById("valuationChart");
+  if (!canvas) return;
+  if (state.valuationChart) {
+    state.valuationChart.destroy();
+    state.valuationChart = null;
+  }
+  if (typeof Chart === "undefined") return;
+
+  const nPoints = dates?.length || 0;
+  const xTickLimit = nPoints > 900 ? 8 : nPoints > 400 ? 10 : 12;
+
+  const datasets = (rescaledSeries || []).map((series, idx) => {
+    const colorIdx = Array.isArray(colorIndexes) ? colorIndexes[idx] : idx;
+    return {
+      label: labels[idx] || `Symbol ${idx + 1}`,
+      data: series.map((v) => {
+        if (!Number.isFinite(v)) return null;
+        // Clamp hard so rescale noise never paints outside the pane.
+        return Number(Math.max(-100, Math.min(100, v)).toFixed(2));
+      }),
+      borderColor: VALUATION_LINE_COLORS[colorIdx % VALUATION_LINE_COLORS.length],
+      backgroundColor: "transparent",
+      borderWidth: 1.75,
+      pointRadius: 0,
+      pointHoverRadius: 3,
+      tension: 0.12,
+      spanGaps: false,
+      clip: 4,
+    };
+  });
+
+  state.valuationChart = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels: dates.map((d) => d.toISOString().slice(0, 10)),
+      datasets,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      layout: { padding: { top: 6, right: 10, bottom: 2, left: 2 } },
+      elements: {
+        line: { borderJoinStyle: "round", borderCapStyle: "round" },
+      },
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: "#cfcfcf", boxWidth: 12, padding: 12 },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${fmtNum(ctx.parsed.y, 1)}`,
+          },
+        },
+        zoom: {
+          limits: { x: { minRange: 12 } },
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: "x",
+          },
+          pan: {
+            enabled: true,
+            mode: "x",
+            modifierKey: null,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: "#9a9a9a",
+            maxTicksLimit: xTickLimit,
+            maxRotation: 0,
+            autoSkip: true,
+            autoSkipPadding: 12,
+          },
+          grid: { color: "rgba(255,255,255,0.06)" },
+        },
+        y: {
+          min: -100,
+          max: 100,
+          grace: 0,
+          ticks: {
+            color: "#9a9a9a",
+            stepSize: 25,
+            callback: (v) => String(v),
+          },
+          grid: { color: "rgba(255,255,255,0.06)" },
+        },
+      },
+    },
+    plugins: [
+      {
+        id: "valuationThresholdLines",
+        afterDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          if (!chartArea || !scales?.y) return;
+          const yScale = scales.y;
+          const drawH = (yVal, dash) => {
+            const y = yScale.getPixelForValue(yVal);
+            if (!Number.isFinite(y) || y < chartArea.top || y > chartArea.bottom) return;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(chartArea.left, chartArea.top, chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
+            ctx.clip();
+            ctx.strokeStyle = yVal === 0 ? "rgba(160,160,160,0.8)" : "rgba(200,200,200,0.55)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash(dash);
+            ctx.beginPath();
+            ctx.moveTo(chartArea.left, y);
+            ctx.lineTo(chartArea.right, y);
+            ctx.stroke();
+            ctx.restore();
+          };
+          drawH(0, []);
+          drawH(75, [5, 4]);
+          drawH(-75, [5, 4]);
+        },
+      },
+    ],
+  });
+  canvas.style.height = "";
+  canvas.style.minHeight = "";
+  bindLeftMousePan(canvas, () => state.valuationChart);
+  if (!canvas.dataset.valuationDblBound) {
+    canvas.dataset.valuationDblBound = "1";
+    canvas.addEventListener("dblclick", () => {
+      state.valuationChart?.resetZoom?.();
+    });
+  }
+}
+
+async function ensureValuationCompSeries(compIds, { force = false } = {}) {
+  const unique = [...new Set((compIds || []).map((id) => String(id || "").toUpperCase()))];
+  const results = {};
+  await Promise.all(
+    unique.map(async (id) => {
+      if (!force && state.valuationCompCache[id]?.prices?.length) {
+        results[id] = state.valuationCompCache[id];
+        return;
+      }
+      const asset = getValuationCompAsset(id);
+      try {
+        const series = await getPriceSeries(asset);
+        const payload = {
+          id,
+          label: asset.label,
+          prices: series?.prices || [],
+          source: series?.source || "--",
+        };
+        state.valuationCompCache[id] = payload;
+        results[id] = payload;
+      } catch (error) {
+        results[id] = { id, label: asset.label, prices: [], source: `errore: ${error.message}` };
+      }
+    })
+  );
+  return results;
+}
+
+async function loadValuationAndRender({ force = false } = {}) {
+  if (state.valuationIsLoading) return;
+  if (!state.priceData?.prices?.length) {
+    if (valuationSourceInfoEl) valuationSourceInfoEl.textContent = "Supreme Valuation: attendi prezzi asset...";
+    return;
+  }
+  state.valuationIsLoading = true;
+  try {
+    await ensureChartsLoaded();
+    const period = Math.max(2, Number(valuationPeriodLengthEl?.value || state.valuationPeriodLength) || 10);
+    const rescale = Math.max(20, Number(valuationRescaleLengthEl?.value || state.valuationRescaleLength) || 100);
+    state.valuationPeriodLength = period;
+    state.valuationRescaleLength = rescale;
+    state.valuationCompIds = [
+      valuationComp1El?.value || state.valuationCompIds[0] || "DXY",
+      valuationComp2El?.value || state.valuationCompIds[1] || "XAUUSD",
+      valuationComp3El?.value || state.valuationCompIds[2] || "ZB1",
+    ];
+
+    const comps = await ensureValuationCompSeries(state.valuationCompIds, { force });
+    const compList = state.valuationCompIds.map((id) => comps[String(id).toUpperCase()] || { prices: [], label: id, source: "--" });
+    const symPrices = filterPricesByTimeframe(state.priceData.prices);
+    const aligned = alignValuationSeries(
+      symPrices,
+      compList.map((c) => ({ prices: filterPricesByTimeframe(c.prices) }))
+    );
+
+    if (aligned.dates.length < period + 5) {
+      if (valuationSourceInfoEl) {
+        valuationSourceInfoEl.textContent = `Supreme Valuation: serie allineate insufficienti (${aligned.dates.length} barre)`;
+      }
+      setValuationKpi(valuationKpi1El, valuationKpi1LabelEl, null, compList[0]?.label);
+      setValuationKpi(valuationKpi2El, valuationKpi2LabelEl, null, compList[1]?.label);
+      setValuationKpi(valuationKpi3El, valuationKpi3LabelEl, null, compList[2]?.label);
+      if (valuationBiasEl) valuationBiasEl.textContent = "--";
+      return;
+    }
+
+    const computed = computeSupremeValuation(
+      aligned.symbolCloses,
+      aligned.compCloses,
+      period,
+      rescale
+    );
+    const selectedId = String(state.selectedAssetId || "").toUpperCase();
+    // Nasconde il confronto con lo stesso asset (linea piatta / rumore rescale).
+    const visibleMask = state.valuationCompIds.map((id) => String(id || "").toUpperCase() !== selectedId);
+    const labels = compList.map((c, i) => `vs ${c.label || state.valuationCompIds[i]}`);
+    const chartSeries = [];
+    const chartLabels = [];
+    const chartColorIdx = [];
+    computed.rescaled.forEach((series, i) => {
+      if (!visibleMask[i]) return;
+      chartSeries.push(series);
+      chartLabels.push(labels[i]);
+      chartColorIdx.push(i);
+    });
+    updateValuationChart(aligned.dates, chartSeries, chartLabels, chartColorIdx);
+
+    const lastIdx = aligned.dates.length - 1;
+    const lastVals = computed.rescaled.map((s) => s[lastIdx]);
+    const kpiTriplet = [
+      [valuationKpi1El, valuationKpi1LabelEl, 0],
+      [valuationKpi2El, valuationKpi2LabelEl, 1],
+      [valuationKpi3El, valuationKpi3LabelEl, 2],
+    ];
+    kpiTriplet.forEach(([el, labelEl, i]) => {
+      if (!visibleMask[i]) {
+        setValuationKpi(el, labelEl, null, `${labels[i]} · nascosto (stesso asset)`);
+        return;
+      }
+      setValuationKpi(el, labelEl, lastVals[i], labels[i]);
+    });
+
+    const finite = lastVals.filter((v, i) => visibleMask[i] && Number.isFinite(v));
+    const avg = finite.length ? finite.reduce((a, b) => a + b, 0) / finite.length : null;
+    if (valuationBiasEl) {
+      if (!Number.isFinite(avg)) valuationBiasEl.textContent = "--";
+      else if (avg >= 75) valuationBiasEl.textContent = "Overvalued";
+      else if (avg <= -75) valuationBiasEl.textContent = "Undervalued";
+      else valuationBiasEl.textContent = `Neutral (${fmtNum(avg, 1)})`;
+    }
+
+    const sources = compList
+      .map((c, i) => {
+        const id = String(state.valuationCompIds[i] || "").toUpperCase();
+        const skip = id === selectedId ? " [nascosto]" : "";
+        return `${c.label}:${c.source}${skip}`;
+      })
+      .join(" · ");
+    if (valuationSourceInfoEl) {
+      valuationSourceInfoEl.textContent = `Supreme Valuation | Period ${period} | Rescale ${rescale} | barre ${aligned.dates.length} | ${sources}`;
+    }
+  } finally {
+    state.valuationIsLoading = false;
+  }
+}
+
 function setActivePage(page) {
   state.activePage = page;
   const isCot = page === "cot";
   const isSeasonality = page === "seasonality";
   const isSignals = page === "signals";
   const isMacro = page === "macro";
+  const isValuation = page === "valuation";
   cotPageEl?.classList.toggle("active", isCot);
   seasonalityPageEl?.classList.toggle("active", isSeasonality);
   signalPageEl?.classList.toggle("active", isSignals);
   macroPageEl?.classList.toggle("active", isMacro);
+  valuationPageEl?.classList.toggle("active", isValuation);
   tabCotEl?.classList.toggle("active", isCot);
   tabSeasonalityEl?.classList.toggle("active", isSeasonality);
   tabSignalsEl?.classList.toggle("active", isSignals);
   tabMacroEl?.classList.toggle("active", isMacro);
+  tabValuationEl?.classList.toggle("active", isValuation);
 
   // Render on-demand della sezione appena aperta (evita lavoro a ogni refresh).
   if (isSeasonality && state.latestSeasonalityPayload) {
@@ -5440,6 +5876,8 @@ function setActivePage(page) {
     renderReplaySnapshot();
   } else if (isMacro) {
     renderMacroCalendar();
+  } else if (isValuation) {
+    loadValuationAndRender({ force: false }).catch(() => {});
   }
 
   setTimeout(() => {
@@ -5448,6 +5886,8 @@ function setActivePage(page) {
       state.cotFocusedChart?.resize();
     } else if (isSeasonality) {
       state.seasonalityChart?.resize();
+    } else if (isValuation) {
+      state.valuationChart?.resize();
     }
   }, 40);
   scheduleRender();
@@ -5687,6 +6127,27 @@ function wireEvents() {
     setActivePage("macro");
     savePrefs();
   });
+  tabValuationEl?.addEventListener("click", () => {
+    setActivePage("valuation");
+    savePrefs();
+  });
+  valuationRefreshBtn?.addEventListener("click", () => {
+    loadValuationAndRender({ force: true }).catch(() => {});
+    savePrefs();
+  });
+  [valuationPeriodLengthEl, valuationRescaleLengthEl, valuationComp1El, valuationComp2El, valuationComp3El].forEach((el) => {
+    el?.addEventListener("change", () => {
+      state.valuationPeriodLength = Math.max(2, Number(valuationPeriodLengthEl?.value) || 10);
+      state.valuationRescaleLength = Math.max(20, Number(valuationRescaleLengthEl?.value) || 100);
+      state.valuationCompIds = [
+        valuationComp1El?.value || "DXY",
+        valuationComp2El?.value || "XAUUSD",
+        valuationComp3El?.value || "ZB1",
+      ];
+      loadValuationAndRender({ force: true }).catch(() => {});
+      savePrefs();
+    });
+  });
 
   seasonalityYearsEl?.addEventListener("change", () => {
     const val = seasonalityYearsEl.value;
@@ -5843,7 +6304,7 @@ async function init() {
     if (prefs.selectedAssetGroup) {
       state.selectedAssetGroup = String(prefs.selectedAssetGroup);
     }
-    if (prefs.activePage && ["cot", "seasonality", "signals", "macro"].includes(prefs.activePage)) {
+    if (prefs.activePage && ["cot", "seasonality", "signals", "macro", "valuation"].includes(prefs.activePage)) {
       state.activePage = prefs.activePage;
     }
     if (prefs.alertMode && ["balanced", "aggressive", "conservative"].includes(prefs.alertMode)) {
@@ -5894,6 +6355,15 @@ async function init() {
     if (prefs.seasonalityMode) state.seasonalityMode = prefs.seasonalityMode;
     if (prefs.seasonalityStartMonth !== undefined) state.seasonalityStartMonth = Number(prefs.seasonalityStartMonth) || 0;
     if (prefs.seasonalityHorizon !== undefined) state.seasonalityHorizon = Number(prefs.seasonalityHorizon) || 3;
+    if (Number.isFinite(Number(prefs.valuationPeriodLength))) {
+      state.valuationPeriodLength = Math.max(2, Number(prefs.valuationPeriodLength));
+    }
+    if (Number.isFinite(Number(prefs.valuationRescaleLength))) {
+      state.valuationRescaleLength = Math.max(20, Number(prefs.valuationRescaleLength));
+    }
+    if (Array.isArray(prefs.valuationCompIds) && prefs.valuationCompIds.length >= 3) {
+      state.valuationCompIds = prefs.valuationCompIds.map((id) => String(id || "").toUpperCase());
+    }
     if (prefs.cotCategory) state.cotChartCategory = prefs.cotCategory;
     if (prefs.cotMetric) state.cotMetric = prefs.cotMetric;
     if (prefs.cotLookback !== undefined) state.cotLookback = Number(prefs.cotLookback) || 52;
@@ -6015,6 +6485,21 @@ async function init() {
   if (cotChartHeightEl) {
     state.cotChartHeight = Number(cotChartHeightEl.value) || 540;
     applyCotPanelHeight();
+  }
+  if (valuationPeriodLengthEl) {
+    valuationPeriodLengthEl.value = String(state.valuationPeriodLength || 10);
+    state.valuationPeriodLength = Math.max(2, Number(valuationPeriodLengthEl.value) || 10);
+  }
+  if (valuationRescaleLengthEl) {
+    valuationRescaleLengthEl.value = String(state.valuationRescaleLength || 100);
+    state.valuationRescaleLength = Math.max(20, Number(valuationRescaleLengthEl.value) || 100);
+  }
+  if (valuationComp1El && valuationComp2El && valuationComp3El) {
+    const ids = state.valuationCompIds || ["DXY", "XAUUSD", "ZB1"];
+    valuationComp1El.value = ids[0] || "DXY";
+    valuationComp2El.value = ids[1] || "XAUUSD";
+    valuationComp3El.value = ids[2] || "ZB1";
+    state.valuationCompIds = [valuationComp1El.value, valuationComp2El.value, valuationComp3El.value];
   }
 
   const cachedPrice = loadCache(getAssetScopedCacheKey(CACHE_KEYS.PRICE), PRICE_CACHE_MAX_AGE_MS);

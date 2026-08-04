@@ -8,14 +8,14 @@
     <link rel="icon" href="/assets/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" href="/assets/favicon-32.png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=20260803-dnsfix-01" />
+    <link rel="stylesheet" href="/styles.css?v=20260804-valuation-01" />
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar card">
         <div class="brand">
           <h1>Leona.Lab</h1>
-          <p class="subtitle">Desk multi-asset: COT, stagionalita, segnali e macro</p>
+          <p class="subtitle">Desk multi-asset: COT, stagionalita, valuation, segnali e macro</p>
           <div class="brand-links">
             <a href="/">Torna alla home</a>
             <a href="/assistenza">Assistenza</a>
@@ -76,6 +76,7 @@
         <button id="tabSeasonality" class="page-tab-btn">Stagionalita</button>
         <button id="tabSignals" class="page-tab-btn">Segnali</button>
         <button id="tabMacro" class="page-tab-btn">Macro</button>
+        <button id="tabValuation" class="page-tab-btn">Valuation</button>
       </section>
 
       <section id="cotPage" class="page-view active">
@@ -598,13 +599,90 @@
         <section class="macro-days-grid" id="macroDaysContainer"></section>
       </section>
 
+      <section id="valuationPage" class="page-view">
+        <section class="card valuation-controls">
+          <div class="controls-row">
+            <div>
+              <strong>Period Length</strong>
+              <input id="valuationPeriodLength" type="number" min="2" max="250" step="1" value="10" />
+            </div>
+            <div>
+              <strong>Rescale Length</strong>
+              <input id="valuationRescaleLength" type="number" min="20" max="500" step="1" value="100" />
+            </div>
+            <div>
+              <strong>Symbol 1</strong>
+              <select id="valuationComp1">
+                <option value="DXY" selected>DXY</option>
+                <option value="XAUUSD">Gold (GC1!)</option>
+                <option value="ZB1">Bonds (ZB1!)</option>
+              </select>
+            </div>
+            <div>
+              <strong>Symbol 2</strong>
+              <select id="valuationComp2">
+                <option value="DXY">DXY</option>
+                <option value="XAUUSD" selected>Gold (GC1!)</option>
+                <option value="ZB1">Bonds (ZB1!)</option>
+              </select>
+            </div>
+            <div>
+              <strong>Symbol 3</strong>
+              <select id="valuationComp3">
+                <option value="DXY">DXY</option>
+                <option value="XAUUSD">Gold (GC1!)</option>
+                <option value="ZB1" selected>Bonds (ZB1!)</option>
+              </select>
+            </div>
+            <div>
+              <button id="valuationRefreshBtn" type="button">Ricalcola</button>
+            </div>
+            <small id="valuationSourceInfo" class="muted">Supreme Valuation: --</small>
+          </div>
+        </section>
+
+        <section class="grid kpi-strip valuation-kpi-grid">
+          <article class="card kpi">
+            <h2>vs Symbol 1</h2>
+            <p id="valuationKpi1" class="kpi-value metric">--</p>
+            <small id="valuationKpi1Label" class="muted">DXY</small>
+          </article>
+          <article class="card kpi">
+            <h2>vs Symbol 2</h2>
+            <p id="valuationKpi2" class="kpi-value metric">--</p>
+            <small id="valuationKpi2Label" class="muted">Gold</small>
+          </article>
+          <article class="card kpi">
+            <h2>vs Symbol 3</h2>
+            <p id="valuationKpi3" class="kpi-value metric">--</p>
+            <small id="valuationKpi3Label" class="muted">Bonds</small>
+          </article>
+          <article class="card kpi">
+            <h2>Lettura</h2>
+            <p id="valuationBias" class="kpi-value metric">--</p>
+            <small class="muted">Soglie ±75 (over / under)</small>
+          </article>
+        </section>
+
+        <section class="card chart-panel valuation-chart-panel">
+          <h2>Supreme Valuation</h2>
+          <p class="muted valuation-note">
+            Differenza di performance % (asset − comparabile) su Period Length, poi riscalata −100…+100 su Rescale Length.
+            Logica allineata allo script TradingView Supreme Valuation.
+          </p>
+          <div class="valuation-chart-wrap">
+            <canvas id="valuationChart"></canvas>
+          </div>
+        </section>
+      </section>
+
       <section class="card status-card">
         <small id="lastUpdated" class="muted">Ultimo aggiornamento: --</small>
         <p id="status">Caricamento dati...</p>
-        <p class="muted">Theme build: 20260721-livefix-74</p>
+        <p class="muted">Theme build: 20260804-valuation-01</p>
       </section>
     </main>
 
-    <script src="./app.js?v=20260804-macro-actuals-01"></script>
+    <script src="./app.js?v=20260804-valuation-01"></script>
   </body>
 </html>
