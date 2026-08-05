@@ -6480,7 +6480,7 @@ function wireEvents() {
           <li><strong>Setup short:</strong> Retail agli estremi long + Non-Commercial che stanno togliendo posizioni → bias short.</li>
           <li><strong>Commercial (materie prime):</strong> agli estremi alti = buon punto per comprare; agli estremi bassi = buon punto per vendere.</li>
         </ul>
-        <p class="info-tip"><strong>Contesto:</strong> non e un obbligo automatico. Incrocia sempre con prezzo, stagionalita e quadro macro prima di decidere size e timing.</p>
+        <p class="info-tip"><strong>Contesto:</strong> non e un obbligo automatico. Incrocia sempre con prezzo, Valuation, stagionalita e quadro macro prima di decidere size e timing.</p>
       `,
     },
     seasonality: {
@@ -6493,7 +6493,7 @@ function wireEvents() {
           <li><strong>Timing giorni:</strong> giorno long e giorno short piu favorevoli per ogni mese, su dati reali.</li>
           <li><strong>Mese ingresso / orizzonte:</strong> allinea la vista al trade che stai valutando.</li>
         </ul>
-        <p class="info-tip"><strong>Uso operativo:</strong> stagione e timing danno il "quando". Non basare il trade solo su questo: crocia con COT e bias.</p>
+        <p class="info-tip"><strong>Uso operativo:</strong> stagione e timing danno il "quando". Non basare il trade solo su questo: crocia con COT, Valuation e bias.</p>
       `,
     },
     signals: {
@@ -6538,7 +6538,7 @@ function wireEvents() {
           <li><strong>Aggiorna:</strong> forza un refresh live (cache tipica ~5 minuti).</li>
           <li><strong>Link:</strong> apri la fonte originale in una nuova scheda.</li>
         </ul>
-        <p class="info-tip"><strong>Uso operativo:</strong> e contesto, non un segnale. Incrocia con Macro, COT e bias prima di cambiare size o direzione.</p>
+        <p class="info-tip"><strong>Uso operativo:</strong> e contesto, non un segnale. Incrocia con Macro, COT, Valuation e bias prima di cambiare size o direzione.</p>
       `,
     },
     valuation: {

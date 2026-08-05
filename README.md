@@ -1,6 +1,6 @@
 # Leona.Lab
 
-Desk multi-asset: COT, stagionalita, segnali e calendario macro.
+Desk multi-asset: COT, stagionalita, valuation, segnali e calendario macro.
 
 ## Avvio locale
 
