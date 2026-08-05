@@ -1551,38 +1551,153 @@ th {
 }
 
 .macro-days-grid {
-  margin-top: 10px;
+  margin-top: 12px;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 28px;
   min-height: 0;
 }
 
 .macro-day-card {
-  border: 1px solid rgba(30, 36, 44, 0.95);
-  border-radius: 10px;
-  background: #000000;
-  padding: 10px;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  background: #050505;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: inset 5px 0 0 #4a4a4a;
+  position: relative;
+}
+
+.macro-day-card + .macro-day-card::before {
+  content: "";
+  position: absolute;
+  top: -15px;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(224, 192, 74, 0.35), transparent);
+  pointer-events: none;
+}
+
+.macro-day-today {
+  border-color: rgba(224, 192, 74, 0.65);
+  box-shadow: inset 5px 0 0 var(--accent-gold);
+}
+
+.macro-day-past {
+  opacity: 0.9;
+  box-shadow: inset 5px 0 0 #666666;
+}
+
+.macro-day-future {
+  box-shadow: inset 5px 0 0 #5a5a5a;
 }
 
 .macro-day-header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid #333333;
+  background: #141414;
+}
+
+.macro-day-today .macro-day-header {
+  background: linear-gradient(180deg, #1c180c 0%, #12100a 100%);
+  border-bottom-color: rgba(224, 192, 74, 0.35);
+}
+
+.macro-day-title {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.macro-day-tone {
+  display: inline-flex;
+  align-self: flex-start;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #d0d0d0;
+  border: 1px solid #444444;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: #000000;
+}
+
+.macro-day-today .macro-day-tone {
+  color: #000000;
+  background: var(--accent-gold);
+  border-color: var(--accent-gold);
+}
+
+.macro-day-past .macro-day-tone {
+  color: #9aa3ad;
+}
+
+.macro-day-future .macro-day-tone {
+  color: #e8e8e8;
+  border-color: #555555;
 }
 
 .macro-day-header h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1.12rem;
+  font-weight: 700;
+  text-transform: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.macro-day-weekday {
   text-transform: capitalize;
+  color: #ffffff;
+}
+
+.macro-day-date {
+  color: var(--accent-gold);
+  font-weight: 700;
+}
+
+.macro-day-count {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #ffffff;
+  border: 1px solid #444444;
+  border-radius: 999px;
+  padding: 5px 11px;
+  background: #000000;
+}
+
+.macro-day-today .macro-day-count {
+  border-color: rgba(224, 192, 74, 0.65);
+  color: var(--accent-gold);
+}
+
+.macro-day-events {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  background: #000000;
 }
 
 .macro-event-item {
-  border: 1px solid rgba(30, 36, 44, 0.95);
+  border: 1px solid #2a2a2a;
   border-radius: 8px;
   background: #000000;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   overflow: hidden;
 }
 

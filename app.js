@@ -896,6 +896,30 @@ function formatRomeDayLabel(dateObj) {
   }).format(dateObj);
 }
 
+function getMacroDayTone(dayKey) {
+  const todayKey = formatMacroDayKey(new Date());
+  if (!dayKey || !todayKey) return "future";
+  if (dayKey === todayKey) return "today";
+  return dayKey < todayKey ? "past" : "future";
+}
+
+function formatRomeDayParts(dateObj) {
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) {
+    return { weekday: "--", date: "--" };
+  }
+  const weekday = new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    weekday: "long",
+  }).format(dateObj);
+  const date = new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(dateObj);
+  return { weekday, date };
+}
+
 function withTimeout(promise, timeoutMs = 8000) {
   return Promise.race([
     promise,
@@ -1640,7 +1664,9 @@ function renderMacroCalendar() {
   });
   macroDaysContainerEl.innerHTML = Array.from(groups.entries())
     .map(([dayKey, dayEvents]) => {
-      const dayLabel = formatRomeDayLabel(dayEvents[0]?.date);
+      const dayTone = getMacroDayTone(dayKey);
+      const parts = formatRomeDayParts(dayEvents[0]?.date);
+      const toneLabel = dayTone === "today" ? "Oggi" : dayTone === "past" ? "Passato" : "Prossimo";
       const content = dayEvents
         .map((e, idx) => {
           const impactLabel = e.impact === "high" ? "Alta" : e.impact === "medium" ? "Media" : "Bassa";
@@ -1691,12 +1717,17 @@ function renderMacroCalendar() {
           </details>`;
         })
         .join("");
-      return `<article class="macro-day-card">
+      return `<article class="macro-day-card macro-day-${dayTone}" data-day="${escapeHtml(dayKey)}">
         <div class="macro-day-header">
-          <h3>${dayLabel}</h3>
-          <small class="muted">${dayEvents.length} eventi</small>
+          <div class="macro-day-title">
+            <span class="macro-day-tone">${toneLabel}</span>
+            <h3><span class="macro-day-weekday">${escapeHtml(parts.weekday)}</span> <span class="macro-day-date">${escapeHtml(parts.date)}</span></h3>
+          </div>
+          <span class="macro-day-count">${dayEvents.length} event${dayEvents.length === 1 ? "o" : "i"}</span>
         </div>
-        ${content}
+        <div class="macro-day-events">
+          ${content}
+        </div>
       </article>`;
     })
     .join("");
