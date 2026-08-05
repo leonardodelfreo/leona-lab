@@ -8,7 +8,7 @@
     <link rel="icon" href="/assets/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" href="/assets/favicon-32.png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=20260805-pageinfo-05" />
+    <link rel="stylesheet" href="/styles.css?v=20260805-vallines-01" />
   </head>
   <body>
     <main class="app-shell">
@@ -638,6 +638,10 @@
                 <option value="XAUUSD">Gold (GC1!)</option>
                 <option value="ZB1">Bonds (ZB1!)</option>
               </select>
+              <label class="valuation-line-toggle">
+                <input id="valuationShow1" type="checkbox" checked />
+                Mostra linea
+              </label>
             </div>
             <div>
               <strong>Symbol 2</strong>
@@ -646,6 +650,10 @@
                 <option value="XAUUSD" selected>Gold (GC1!)</option>
                 <option value="ZB1">Bonds (ZB1!)</option>
               </select>
+              <label class="valuation-line-toggle">
+                <input id="valuationShow2" type="checkbox" checked />
+                Mostra linea
+              </label>
             </div>
             <div>
               <strong>Symbol 3</strong>
@@ -654,6 +662,10 @@
                 <option value="XAUUSD">Gold (GC1!)</option>
                 <option value="ZB1" selected>Bonds (ZB1!)</option>
               </select>
+              <label class="valuation-line-toggle">
+                <input id="valuationShow3" type="checkbox" checked />
+                Mostra linea
+              </label>
             </div>
             <div>
               <button id="valuationRefreshBtn" type="button">Ricalcola</button>
@@ -700,7 +712,7 @@
       <section class="card status-card">
         <small id="lastUpdated" class="muted">Ultimo aggiornamento: --</small>
         <p id="status">Caricamento dati...</p>
-        <p class="muted">Theme build: 20260805-pageinfo-05</p>
+        <p class="muted">Theme build: 20260805-vallines-02</p>
       </section>
     </main>
 
@@ -714,6 +726,6 @@
       </div>
     </dialog>
 
-    <script src="./app.js?v=20260805-pageinfo-05"></script>
+    <script src="./app.js?v=20260805-vallines-02"></script>
   </body>
 </html>

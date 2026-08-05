@@ -31,6 +31,9 @@ const valuationRescaleLengthEl = document.getElementById("valuationRescaleLength
 const valuationComp1El = document.getElementById("valuationComp1");
 const valuationComp2El = document.getElementById("valuationComp2");
 const valuationComp3El = document.getElementById("valuationComp3");
+const valuationShow1El = document.getElementById("valuationShow1");
+const valuationShow2El = document.getElementById("valuationShow2");
+const valuationShow3El = document.getElementById("valuationShow3");
 const valuationRefreshBtn = document.getElementById("valuationRefreshBtn");
 const valuationSourceInfoEl = document.getElementById("valuationSourceInfo");
 const valuationKpi1El = document.getElementById("valuationKpi1");
@@ -276,6 +279,7 @@ const state = {
   valuationPeriodLength: 10,
   valuationRescaleLength: 100,
   valuationCompIds: ["DXY", "XAUUSD", "ZB1"],
+  valuationLineVisible: [true, true, true],
   valuationCompCache: {},
   valuationChart: null,
   valuationIsLoading: false,
@@ -459,6 +463,7 @@ function buildPrefsSnapshot() {
     valuationPeriodLength: state.valuationPeriodLength,
     valuationRescaleLength: state.valuationRescaleLength,
     valuationCompIds: state.valuationCompIds,
+    valuationLineVisible: state.valuationLineVisible,
     cotCategory: state.cotChartCategory,
     cotMetric: state.cotMetric,
     cotLookback: state.cotLookback,
@@ -5911,7 +5916,11 @@ async function loadValuationAndRender({ force = false } = {}) {
     );
     const selectedId = String(state.selectedAssetId || "").toUpperCase();
     // Nasconde il confronto con lo stesso asset (linea piatta / rumore rescale).
-    const visibleMask = state.valuationCompIds.map((id) => String(id || "").toUpperCase() !== selectedId);
+    const sameAssetMask = state.valuationCompIds.map((id) => String(id || "").toUpperCase() !== selectedId);
+    const userVisible = Array.isArray(state.valuationLineVisible)
+      ? state.valuationLineVisible
+      : [true, true, true];
+    const visibleMask = sameAssetMask.map((ok, i) => ok && userVisible[i] !== false);
     const labels = compList.map((c, i) => `vs ${c.label || state.valuationCompIds[i]}`);
     const chartSeries = [];
     const chartLabels = [];
@@ -5932,8 +5941,14 @@ async function loadValuationAndRender({ force = false } = {}) {
       [valuationKpi3El, valuationKpi3LabelEl, 2],
     ];
     kpiTriplet.forEach(([el, labelEl, i]) => {
-      if (!visibleMask[i]) {
+      const card = el?.closest?.(".card");
+      if (card) card.classList.toggle("valuation-kpi-dimmed", !visibleMask[i]);
+      if (!sameAssetMask[i]) {
         setValuationKpi(el, labelEl, null, `${labels[i]} · nascosto (stesso asset)`);
+        return;
+      }
+      if (userVisible[i] === false) {
+        setValuationKpi(el, labelEl, lastVals[i], `${labels[i]} · linea off`);
         return;
       }
       setValuationKpi(el, labelEl, lastVals[i], labels[i]);
@@ -5951,12 +5966,12 @@ async function loadValuationAndRender({ force = false } = {}) {
     const sources = compList
       .map((c, i) => {
         const id = String(state.valuationCompIds[i] || "").toUpperCase();
-        const skip = id === selectedId ? " [nascosto]" : "";
+        const skip = id === selectedId ? " [stesso asset]" : userVisible[i] === false ? " [linea off]" : "";
         return `${c.label}:${c.source}${skip}`;
       })
       .join(" · ");
     if (valuationSourceInfoEl) {
-      valuationSourceInfoEl.textContent = `Supreme Valuation | Period ${period} | Rescale ${rescale} | barre ${aligned.dates.length} | ${sources}`;
+      valuationSourceInfoEl.textContent = `Supreme Valuation | Period ${period} | Rescale ${rescale} | barre ${aligned.dates.length} | linee ${chartSeries.length}/3 | ${sources}`;
     }
   } finally {
     state.valuationIsLoading = false;
@@ -6313,12 +6328,19 @@ function wireEvents() {
           <li><strong>Metalli e agricole</strong> → guarda l'<strong>oro</strong></li>
           <li><strong>Indici</strong> → guarda <strong>ZB1</strong></li>
         </ul>
+        <p><strong>Period Length consigliato:</strong></p>
+        <ul>
+          <li><strong>Forex</strong> → 10</li>
+          <li><strong>Indici</strong> → 30</li>
+          <li><strong>Metalli e agricole</strong> → 10</li>
+        </ul>
         <p><strong>Lettura della linea:</strong></p>
         <ul>
           <li><strong>Sopra +75:</strong> l'asset scelto risulta stirato al rialzo vs il comparabile → bias <span class="bias-short">short</span> (da contestualizzare).</li>
           <li><strong>Sotto −75:</strong> l'asset risulta stirato al ribasso vs il comparabile → bias <span class="bias-long">long</span> (da contestualizzare).</li>
           <li><strong>Tre linee sotto:</strong> se tutte e tre sono sotto → piu forza per <span class="bias-long">comprare</span>.</li>
           <li><strong>Tre linee sopra:</strong> se tutte e tre sono sopra → piu forza per <span class="bias-short">vendere</span>.</li>
+          <li><strong>Mostra linea:</strong> puoi spegnere i singoli confronti e lasciarne anche uno solo sul grafico.</li>
         </ul>
         <p class="info-tip"><strong>Contesto:</strong> non e un obbligo. Valuation indica forza relativa estrema: conferma sempre con COT, stagionalita e struttura del prezzo.</p>
       `,
@@ -6370,6 +6392,27 @@ function wireEvents() {
         valuationComp2El?.value || "XAUUSD",
         valuationComp3El?.value || "ZB1",
       ];
+      loadValuationAndRender({ force: false }).catch(() => {});
+      savePrefs();
+    });
+  });
+
+  function syncValuationLineVisibleFromUi() {
+    state.valuationLineVisible = [
+      valuationShow1El ? Boolean(valuationShow1El.checked) : true,
+      valuationShow2El ? Boolean(valuationShow2El.checked) : true,
+      valuationShow3El ? Boolean(valuationShow3El.checked) : true,
+    ];
+  }
+
+  [valuationShow1El, valuationShow2El, valuationShow3El].forEach((el) => {
+    el?.addEventListener("change", () => {
+      syncValuationLineVisibleFromUi();
+      // Evita di spegnere tutte le linee: se tutte off, riaccendi quella cliccata.
+      if (state.valuationLineVisible.every((v) => !v)) {
+        el.checked = true;
+        syncValuationLineVisibleFromUi();
+      }
       loadValuationAndRender({ force: false }).catch(() => {});
       savePrefs();
     });
@@ -6590,6 +6633,10 @@ async function init() {
     if (Array.isArray(prefs.valuationCompIds) && prefs.valuationCompIds.length >= 3) {
       state.valuationCompIds = prefs.valuationCompIds.map((id) => String(id || "").toUpperCase());
     }
+    if (Array.isArray(prefs.valuationLineVisible) && prefs.valuationLineVisible.length >= 3) {
+      state.valuationLineVisible = prefs.valuationLineVisible.slice(0, 3).map((v) => v !== false);
+      if (state.valuationLineVisible.every((v) => !v)) state.valuationLineVisible = [true, true, true];
+    }
     if (prefs.cotCategory) state.cotChartCategory = prefs.cotCategory;
     if (prefs.cotMetric) state.cotMetric = prefs.cotMetric;
     if (prefs.cotLookback !== undefined) state.cotLookback = Number(prefs.cotLookback) || 52;
@@ -6727,6 +6774,15 @@ async function init() {
     valuationComp3El.value = ids[2] || "ZB1";
     state.valuationCompIds = [valuationComp1El.value, valuationComp2El.value, valuationComp3El.value];
   }
+  const lineVis = Array.isArray(state.valuationLineVisible) ? state.valuationLineVisible : [true, true, true];
+  if (valuationShow1El) valuationShow1El.checked = lineVis[0] !== false;
+  if (valuationShow2El) valuationShow2El.checked = lineVis[1] !== false;
+  if (valuationShow3El) valuationShow3El.checked = lineVis[2] !== false;
+  state.valuationLineVisible = [
+    valuationShow1El ? Boolean(valuationShow1El.checked) : true,
+    valuationShow2El ? Boolean(valuationShow2El.checked) : true,
+    valuationShow3El ? Boolean(valuationShow3El.checked) : true,
+  ];
 
   const cachedPrice = loadCache(getAssetScopedCacheKey(CACHE_KEYS.PRICE), PRICE_CACHE_MAX_AGE_MS);
   if (cachedPrice?.prices?.length) {
