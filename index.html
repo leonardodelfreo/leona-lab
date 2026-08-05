@@ -8,14 +8,14 @@
     <link rel="icon" href="/assets/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" href="/assets/favicon-32.png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=20260805-macrodays-02" />
+    <link rel="stylesheet" href="/styles.css?v=20260805-news-03" />
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar card">
         <div class="brand">
           <h1>Leona.Lab</h1>
-          <p class="subtitle">Desk multi-asset: COT, stagionalita, valuation, segnali e macro</p>
+          <p class="subtitle">Desk multi-asset: COT, stagionalita, valuation, news, segnali e macro</p>
           <div class="brand-links">
             <a href="/">Torna alla home</a>
             <a href="/assistenza">Assistenza</a>
@@ -83,12 +83,16 @@
             <button type="button" class="page-info-dot" data-info="seasonality" title="Come usare Stagionalita" aria-label="Come usare la pagina Stagionalita">i</button>
           </div>
           <div class="page-tab-with-info">
+            <button id="tabValuation" class="page-tab-btn" type="button">Valuation</button>
+            <button type="button" class="page-info-dot" data-info="valuation" title="Come usare Valuation" aria-label="Come usare la pagina Valuation">i</button>
+          </div>
+          <div class="page-tab-with-info">
             <button id="tabMacro" class="page-tab-btn" type="button">Macro</button>
             <button type="button" class="page-info-dot" data-info="macro" title="Come usare Macro" aria-label="Come usare il calendario Macro">i</button>
           </div>
           <div class="page-tab-with-info">
-            <button id="tabValuation" class="page-tab-btn" type="button">Valuation</button>
-            <button type="button" class="page-info-dot" data-info="valuation" title="Come usare Valuation" aria-label="Come usare la pagina Valuation">i</button>
+            <button id="tabNews" class="page-tab-btn" type="button">News</button>
+            <button type="button" class="page-info-dot" data-info="news" title="Come usare News" aria-label="Come usare la pagina News">i</button>
           </div>
         </div>
         <div class="page-tabs-sep" aria-hidden="true"></div>
@@ -620,6 +624,29 @@
         <section class="macro-days-grid" id="macroDaysContainer"></section>
       </section>
 
+      <section id="newsPage" class="page-view">
+        <section class="card news-controls">
+          <div class="controls-row">
+            <div class="news-filter-block">
+              <strong>Cerca</strong>
+              <input id="newsSearchInput" type="search" placeholder="Filtra titolo o fonte..." />
+            </div>
+            <div>
+              <button id="newsRefreshBtn" type="button">Aggiorna news</button>
+            </div>
+            <span id="newsFeedStateBadge" class="macro-feed-badge macro-feed-unknown">UNKNOWN</span>
+            <small id="newsSourceInfo" class="muted">Fonte news: --</small>
+          </div>
+        </section>
+        <section class="card news-list-card">
+          <div class="news-list-header">
+            <h2>Breaking News mondiali</h2>
+            <p class="muted">Contesto geopolitico e eventi globali. Non e un segnale operativo.</p>
+          </div>
+          <div id="newsList" class="news-list"></div>
+        </section>
+      </section>
+
       <section id="valuationPage" class="page-view">
         <section class="card valuation-controls">
           <div class="controls-row">
@@ -712,7 +739,7 @@
       <section class="card status-card">
         <small id="lastUpdated" class="muted">Ultimo aggiornamento: --</small>
         <p id="status">Caricamento dati...</p>
-        <p class="muted">Theme build: 20260805-macrodays-02</p>
+        <p class="muted">Theme build: 20260805-news-03</p>
       </section>
     </main>
 
@@ -726,6 +753,6 @@
       </div>
     </dialog>
 
-    <script src="./app.js?v=20260805-macrodays-02"></script>
+    <script src="./app.js?v=20260805-news-03"></script>
   </body>
 </html>

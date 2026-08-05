@@ -149,6 +149,25 @@ const macroState = {
   errors: [],
 };
 
+const NEWS_CACHE_TTL_MS = 5 * 60 * 1000;
+const NEWS_REFRESH_MS_OK = 5 * 60 * 1000;
+const NEWS_REFRESH_MS_DEGRADED = 90 * 1000;
+const NEWS_FEEDS = [
+  { id: "bbc", name: "BBC World", url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
+  { id: "google", name: "Google News World", url: "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en&gl=US&ceid=US:en" },
+  { id: "aljazeera", name: "Al Jazeera", url: "https://www.aljazeera.com/xml/rss/all.xml" },
+];
+
+const newsState = {
+  rows: [],
+  source: "DOWN",
+  mode: "DOWN",
+  lastRefreshAt: 0,
+  lastLiveSuccessAt: 0,
+  errors: [],
+  inFlight: null,
+};
+
 const sessions = new Map();
 let sessionsDirty = false;
 let sessionsSaveTimer = null;
@@ -2319,6 +2338,172 @@ function startMacroScheduler() {
   loop();
 }
 
+function decodeXmlEntities(text) {
+  return String(text || "")
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .trim();
+}
+
+function stripHtml(text) {
+  return decodeXmlEntities(String(text || "").replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractRssTag(block, tagName) {
+  const cdata = block.match(new RegExp(`<${tagName}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*</${tagName}>`, "i"));
+  if (cdata) return decodeXmlEntities(cdata[1]);
+  const plain = block.match(new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)</${tagName}>`, "i"));
+  if (plain) return decodeXmlEntities(plain[1]);
+  if (tagName === "link") {
+    const atom = block.match(/<link[^>]+href=["']([^"']+)["'][^>]*>/i);
+    if (atom) return decodeXmlEntities(atom[1]);
+  }
+  return "";
+}
+
+function parseRssItems(xml, sourceName) {
+  const items = [];
+  const chunks = String(xml || "").match(/<item[\s\S]*?<\/item>/gi) || [];
+  for (const chunk of chunks) {
+    const title = stripHtml(extractRssTag(chunk, "title"));
+    const link = extractRssTag(chunk, "link") || extractRssTag(chunk, "guid");
+    const summary = stripHtml(extractRssTag(chunk, "description") || extractRssTag(chunk, "summary"));
+    const publishedRaw = extractRssTag(chunk, "pubDate") || extractRssTag(chunk, "published") || extractRssTag(chunk, "updated");
+    const publishedAt = publishedRaw ? new Date(publishedRaw) : null;
+    if (!title || !link) continue;
+    items.push({
+      title,
+      summary: summary.slice(0, 320),
+      source: sourceName,
+      publishedAt: publishedAt && !Number.isNaN(publishedAt.getTime()) ? publishedAt.toISOString() : null,
+      url: link,
+    });
+  }
+  return items;
+}
+
+async function fetchRssFeed(feed) {
+  const response = await fetch(feed.url, {
+    headers: {
+      Accept: "application/rss+xml, application/xml, text/xml, */*",
+      "User-Agent": "LeonaLabNewsBot/1.0 (+https://leona-lab.com)",
+    },
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) {
+    throw new Error(`${feed.name} HTTP ${response.status}`);
+  }
+  const xml = await response.text();
+  return parseRssItems(xml, feed.name);
+}
+
+function dedupeNewsRows(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const row of rows) {
+    const key = `${String(row.url || "").toLowerCase()}|${String(row.title || "").toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+async function refreshBreakingNews({ force = false } = {}) {
+  const age = Date.now() - (newsState.lastRefreshAt || 0);
+  if (!force && newsState.rows.length && age < NEWS_CACHE_TTL_MS) {
+    return newsState;
+  }
+  if (newsState.inFlight) {
+    return newsState.inFlight;
+  }
+  newsState.inFlight = (async () => {
+    const errors = [];
+    const batches = await Promise.all(
+      NEWS_FEEDS.map(async (feed) => {
+        try {
+          return await fetchRssFeed(feed);
+        } catch (error) {
+          errors.push(`${feed.name}: ${error.message || error}`);
+          return [];
+        }
+      })
+    );
+    const merged = dedupeNewsRows(batches.flat())
+      .sort((a, b) => {
+        const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+        const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+        return tb - ta;
+      })
+      .slice(0, 40);
+
+    if (merged.length) {
+      const liveFeeds = NEWS_FEEDS.length - errors.length;
+      newsState.rows = merged;
+      newsState.mode = errors.length ? (liveFeeds > 0 ? "LIVE" : "CACHE") : "LIVE";
+      newsState.source =
+        errors.length === 0
+          ? `LIVE merge | ${NEWS_FEEDS.map((f) => f.name).join(" + ")}`
+          : `LIVE partial | ok ${liveFeeds}/${NEWS_FEEDS.length}`;
+      newsState.lastRefreshAt = Date.now();
+      newsState.lastLiveSuccessAt = Date.now();
+      newsState.errors = errors;
+      return newsState;
+    }
+
+    if (newsState.rows.length) {
+      newsState.mode = "CACHE";
+      newsState.source = `CACHE | ultimo live riuscito`;
+      newsState.lastRefreshAt = Date.now();
+      newsState.errors = errors;
+      return newsState;
+    }
+
+    newsState.rows = [];
+    newsState.mode = "DOWN";
+    newsState.source = "Feed news non disponibile";
+    newsState.lastRefreshAt = Date.now();
+    newsState.errors = errors;
+    return newsState;
+  })();
+
+  try {
+    return await newsState.inFlight;
+  } finally {
+    newsState.inFlight = null;
+  }
+}
+
+function getNewsRefreshDelayMs() {
+  if (newsState.mode === "LIVE") return NEWS_REFRESH_MS_OK;
+  return NEWS_REFRESH_MS_DEGRADED;
+}
+
+function startNewsScheduler() {
+  const loop = async () => {
+    try {
+      await refreshBreakingNews({ force: true });
+    } catch (error) {
+      newsState.source = `Feed news non disponibile (${error.message})`;
+      newsState.mode = "DOWN";
+      newsState.lastRefreshAt = Date.now();
+    } finally {
+      setTimeout(loop, getNewsRefreshDelayMs());
+    }
+  };
+  loop();
+}
+
 function json(res, statusCode, data) {
   const payload = JSON.stringify(data);
   applySecurityHeaders(res);
@@ -3169,11 +3354,27 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  if (pathname === "/api/news/breaking") {
+    if (!requireAppAccess(req, res)) return;
+    const force = requestUrl.searchParams.get("force") === "1";
+    await refreshBreakingNews({ force });
+    return json(res, 200, {
+      ok: newsState.rows.length > 0,
+      mode: newsState.mode,
+      source: newsState.source,
+      lastLiveSuccessAt: newsState.lastLiveSuccessAt || null,
+      lastRefreshAt: newsState.lastRefreshAt || null,
+      rows: newsState.rows,
+      errors: newsState.errors,
+    });
+  }
+
   return serveStatic(req, res, pathname);
 });
 
 bootstrapAuthStore();
 startMacroScheduler();
+startNewsScheduler();
 server.listen(PORT, HOST, () => {
   console.log(`[server] running on http://${HOST}:${PORT}`);
   if (STRIPE_SECRET_KEY && !STRIPE_WEBHOOK_SECRET) {
@@ -3186,6 +3387,10 @@ server.listen(PORT, HOST, () => {
   setTimeout(() => {
     Promise.all(["XAUUSD", "DXY", "ZB1"].map((id) => getPriceSeriesForAsset(id).catch(() => null))).catch(() => {});
   }, 2500);
+  // Warm news cache in background as well.
+  setTimeout(() => {
+    refreshBreakingNews({ force: false }).catch(() => {});
+  }, 3500);
 });
 
 process.on("SIGTERM", () => {

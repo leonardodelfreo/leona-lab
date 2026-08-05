@@ -20,12 +20,19 @@ const tabCotEl = document.getElementById("tabCot");
 const tabSeasonalityEl = document.getElementById("tabSeasonality");
 const tabSignalsEl = document.getElementById("tabSignals");
 const tabMacroEl = document.getElementById("tabMacro");
+const tabNewsEl = document.getElementById("tabNews");
 const tabValuationEl = document.getElementById("tabValuation");
 const cotPageEl = document.getElementById("cotPage");
 const seasonalityPageEl = document.getElementById("seasonalityPage");
 const signalPageEl = document.getElementById("signalPage");
 const macroPageEl = document.getElementById("macroPage");
+const newsPageEl = document.getElementById("newsPage");
 const valuationPageEl = document.getElementById("valuationPage");
+const newsSearchInputEl = document.getElementById("newsSearchInput");
+const newsRefreshBtnEl = document.getElementById("newsRefreshBtn");
+const newsFeedStateBadgeEl = document.getElementById("newsFeedStateBadge");
+const newsSourceInfoEl = document.getElementById("newsSourceInfo");
+const newsListEl = document.getElementById("newsList");
 const valuationPeriodLengthEl = document.getElementById("valuationPeriodLength");
 const valuationRescaleLengthEl = document.getElementById("valuationRescaleLength");
 const valuationComp1El = document.getElementById("valuationComp1");
@@ -276,6 +283,13 @@ const state = {
   macroIsLoading: false,
   macroWatcherId: null,
   macroActualJustUpdated: false,
+  newsItems: [],
+  newsSource: "--",
+  newsMode: "DOWN",
+  newsSearch: "",
+  newsLastFetchAt: 0,
+  newsIsLoading: false,
+  newsWatcherId: null,
   valuationPeriodLength: 10,
   valuationRescaleLength: 100,
   valuationCompIds: ["DXY", "XAUUSD", "ZB1"],
@@ -987,6 +1001,8 @@ const MACRO_REFRESH_MS_HOT = 15 * 1000;
 const MACRO_HOT_PRE_MS = 10 * 60 * 1000;
 const MACRO_HOT_POST_MS = 45 * 60 * 1000;
 const MACRO_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const NEWS_REFRESH_MS_OK = 5 * 60 * 1000;
+const NEWS_REFRESH_MS_DEGRADED = 90 * 1000;
 
 const TRACKED_MACRO_CURRENCIES = ["USD", "EUR", "AUD", "JPY", "GBP", "CHF", "CAD", "NZD"];
 const TRACKED_MACRO_CURRENCY_SET = new Set(TRACKED_MACRO_CURRENCIES);
@@ -1733,6 +1749,120 @@ function renderMacroCalendar() {
     .join("");
 }
 
+function setNewsFeedBadge(mode) {
+  if (!newsFeedStateBadgeEl) return;
+  const normalized = String(mode || "unknown").toLowerCase();
+  newsFeedStateBadgeEl.className = `macro-feed-badge macro-feed-${normalized}`;
+  newsFeedStateBadgeEl.textContent =
+    normalized === "live"
+      ? "LIVE"
+      : normalized === "failover"
+        ? "FAILOVER"
+        : normalized === "cache"
+          ? "CACHE"
+          : normalized === "down"
+            ? "DOWN"
+            : "UNKNOWN";
+}
+
+function formatNewsTime(iso) {
+  if (!iso) return "--";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "--";
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(d);
+}
+
+function renderBreakingNews() {
+  if (!newsListEl) return;
+  const q = String(state.newsSearch || "").trim().toLowerCase();
+  const rows = (state.newsItems || []).filter((item) => {
+    if (!q) return true;
+    const hay = `${item.title || ""} ${item.source || ""} ${item.summary || ""}`.toLowerCase();
+    return hay.includes(q);
+  });
+
+  if (newsSourceInfoEl) {
+    const sync = state.newsLastFetchAt ? new Date(state.newsLastFetchAt).toLocaleTimeString("it-IT") : "--";
+    newsSourceInfoEl.textContent = `Fonte news: ${state.newsSource || "--"} | items: ${rows.length}/${(state.newsItems || []).length} | sync: ${sync}`;
+  }
+
+  const mode = String(state.newsMode || "").toLowerCase();
+  if (mode.includes("live") && mode.includes("partial")) setNewsFeedBadge("failover");
+  else if (mode.includes("live")) setNewsFeedBadge("live");
+  else if (mode.includes("cache")) setNewsFeedBadge("cache");
+  else if (mode.includes("down") || !(state.newsItems || []).length) setNewsFeedBadge("down");
+  else setNewsFeedBadge("unknown");
+
+  if (!rows.length) {
+    newsListEl.innerHTML = `<article class="news-item"><div class="muted">Nessuna breaking news disponibile${q ? " per il filtro corrente" : ""}. Prova Aggiorna news.</div></article>`;
+    return;
+  }
+
+  newsListEl.innerHTML = rows
+    .map((item) => {
+      const title = escapeHtml(item.title || "--");
+      const source = escapeHtml(item.source || "--");
+      const summary = escapeHtml(item.summary || "");
+      const when = escapeHtml(formatNewsTime(item.publishedAt));
+      const url = String(item.url || "").trim();
+      const safeUrl = /^https?:\/\//i.test(url) ? escapeHtml(url) : "";
+      const link = safeUrl
+        ? `<a class="news-item-link" href="${safeUrl}" target="_blank" rel="noopener noreferrer">Apri fonte</a>`
+        : `<span class="muted">Link non disponibile</span>`;
+      return `<article class="news-item">
+        <div class="news-item-meta">
+          <span class="news-item-source">${source}</span>
+          <span class="news-item-time">${when}</span>
+        </div>
+        <h3 class="news-item-title">${title}</h3>
+        ${summary ? `<p class="news-item-summary muted">${summary}</p>` : ""}
+        <div class="news-item-actions">${link}</div>
+      </article>`;
+    })
+    .join("");
+}
+
+async function loadBreakingNews({ force = false } = {}) {
+  if (!newsListEl) return;
+  if (state.newsIsLoading) return;
+  state.newsIsLoading = true;
+  if (newsSourceInfoEl) newsSourceInfoEl.textContent = "Caricamento breaking news...";
+  try {
+    const base = getMacroBackendBaseUrl();
+    const url = `${base}/api/news/breaking?t=${Date.now()}${force ? "&force=1" : ""}`;
+    const payload = await fetchJsonWithAuth(url);
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    state.newsItems = rows
+      .map((r) => ({
+        title: String(r.title || "").trim(),
+        summary: String(r.summary || "").trim(),
+        source: String(r.source || "").trim(),
+        publishedAt: r.publishedAt || null,
+        url: String(r.url || "").trim(),
+      }))
+      .filter((r) => r.title);
+    state.newsSource = payload?.source || "--";
+    state.newsMode = String(payload?.mode || "DOWN").toUpperCase();
+    state.newsLastFetchAt = Date.now();
+    renderBreakingNews();
+  } catch (error) {
+    if (!(state.newsItems || []).length) {
+      state.newsMode = "DOWN";
+      state.newsSource = error?.message || "Feed news non disponibile";
+    }
+    renderBreakingNews();
+  } finally {
+    state.newsIsLoading = false;
+  }
+}
+
 async function loadMacroCalendar() {
   if (state.macroIsLoading) return;
   state.macroIsLoading = true;
@@ -1803,6 +1933,34 @@ function startMacroActualWatcher() {
     if (document.hidden) return;
     refreshMacroIfStale();
   }, MACRO_REFRESH_MS_HOT);
+}
+
+function refreshNewsIfStale({ force = false } = {}) {
+  const now = Date.now();
+  const sourceText = String(state.newsSource || "").toLowerCase();
+  const degraded =
+    !state.newsLastFetchAt ||
+    sourceText.includes("cache") ||
+    sourceText.includes("down") ||
+    !(state.newsItems || []).length;
+  const staleMs = degraded ? NEWS_REFRESH_MS_DEGRADED : NEWS_REFRESH_MS_OK;
+  if (!force && state.newsLastFetchAt && now - state.newsLastFetchAt < staleMs) return;
+  loadBreakingNews({ force: Boolean(force || degraded) }).catch(() => {
+    if (!(state.newsItems || []).length) {
+      state.newsMode = "DOWN";
+      state.newsSource = "Feed news non disponibile (errore aggiornamento)";
+      renderBreakingNews();
+    }
+  });
+}
+
+function startNewsWatcher() {
+  if (state.newsWatcherId) clearInterval(state.newsWatcherId);
+  state.newsWatcherId = setInterval(() => {
+    if (document.hidden) return;
+    // Keep feed warm even off-tab; when News is open, force soft refresh cadence.
+    refreshNewsIfStale({ force: state.activePage === "news" && Date.now() - (state.newsLastFetchAt || 0) > NEWS_REFRESH_MS_OK });
+  }, NEWS_REFRESH_MS_DEGRADED);
 }
 
 function computeMacroRiskWindow(now = new Date()) {
@@ -5333,6 +5491,9 @@ function renderDashboard() {
   if (state.activePage === "macro") {
     renderMacroCalendar();
   }
+  if (state.activePage === "news") {
+    refreshNewsIfStale({ force: false });
+  }
   if (state.activePage === "valuation") {
     loadValuationAndRender({ force: false }).catch(() => {});
   } else {
@@ -6015,16 +6176,19 @@ function setActivePage(page) {
   const isSeasonality = page === "seasonality";
   const isSignals = page === "signals";
   const isMacro = page === "macro";
+  const isNews = page === "news";
   const isValuation = page === "valuation";
   cotPageEl?.classList.toggle("active", isCot);
   seasonalityPageEl?.classList.toggle("active", isSeasonality);
   signalPageEl?.classList.toggle("active", isSignals);
   macroPageEl?.classList.toggle("active", isMacro);
+  newsPageEl?.classList.toggle("active", isNews);
   valuationPageEl?.classList.toggle("active", isValuation);
   tabCotEl?.classList.toggle("active", isCot);
   tabSeasonalityEl?.classList.toggle("active", isSeasonality);
   tabSignalsEl?.classList.toggle("active", isSignals);
   tabMacroEl?.classList.toggle("active", isMacro);
+  tabNewsEl?.classList.toggle("active", isNews);
   tabValuationEl?.classList.toggle("active", isValuation);
 
   // Render on-demand della sezione appena aperta (evita lavoro a ogni refresh).
@@ -6036,6 +6200,9 @@ function setActivePage(page) {
     renderReplaySnapshot();
   } else if (isMacro) {
     renderMacroCalendar();
+  } else if (isNews) {
+    loadBreakingNews({ force: false }).catch(() => {});
+    refreshNewsIfStale({ force: false });
   } else if (isValuation) {
     loadValuationAndRender({ force: false }).catch(() => {});
   }
@@ -6287,9 +6454,20 @@ function wireEvents() {
     setActivePage("macro");
     savePrefs();
   });
+  tabNewsEl?.addEventListener("click", () => {
+    setActivePage("news");
+    savePrefs();
+  });
   tabValuationEl?.addEventListener("click", () => {
     setActivePage("valuation");
     savePrefs();
+  });
+  newsRefreshBtnEl?.addEventListener("click", () => {
+    loadBreakingNews({ force: true }).catch(() => {});
+  });
+  newsSearchInputEl?.addEventListener("input", () => {
+    state.newsSearch = String(newsSearchInputEl.value || "");
+    renderBreakingNews();
   });
 
   const PAGE_INFO = {
@@ -6348,6 +6526,19 @@ function wireEvents() {
           <li><strong>Badge feed:</strong> LIVE ok · FAILOVER fonte alternativa · CACHE dato salvato (piu cautela).</li>
         </ul>
         <p class="info-tip"><strong>Uso operativo:</strong> sulle news ad alta importanza riduci size o evita di forzare entry; usa il calendario per sapere quando il contesto puo cambiare in fretta.</p>
+      `,
+    },
+    news: {
+      title: "Come usare Breaking News",
+      html: `
+        <p><strong>A cosa serve:</strong> leggere il flusso di breaking news mondiali (geopolitica ed eventi globali) senza uscire dal desk.</p>
+        <ul>
+          <li><strong>Fonti:</strong> aggregato RSS (BBC World, Google News World, Al Jazeera) via proxy backend.</li>
+          <li><strong>Filtro:</strong> cerca per titolo o fonte.</li>
+          <li><strong>Aggiorna:</strong> forza un refresh live (cache tipica ~5 minuti).</li>
+          <li><strong>Link:</strong> apri la fonte originale in una nuova scheda.</li>
+        </ul>
+        <p class="info-tip"><strong>Uso operativo:</strong> e contesto, non un segnale. Incrocia con Macro, COT e bias prima di cambiare size o direzione.</p>
       `,
     },
     valuation: {
@@ -6604,7 +6795,7 @@ async function init() {
     if (prefs.selectedAssetGroup) {
       state.selectedAssetGroup = String(prefs.selectedAssetGroup);
     }
-    if (prefs.activePage && ["cot", "seasonality", "signals", "macro", "valuation"].includes(prefs.activePage)) {
+    if (prefs.activePage && ["cot", "seasonality", "signals", "macro", "news", "valuation"].includes(prefs.activePage)) {
       state.activePage = prefs.activePage;
     }
     if (prefs.alertMode && ["balanced", "aggressive", "conservative"].includes(prefs.alertMode)) {
@@ -6844,7 +7035,9 @@ async function init() {
   wireEvents();
   wireRealtimeLifecycleRefresh();
   startMacroActualWatcher();
+  startNewsWatcher();
   refreshMacroIfStale({ force: true });
+  refreshNewsIfStale({ force: true });
   setActivePage(state.activePage || "cot");
   if (state.priceData || state.cotData) {
     renderDashboard();

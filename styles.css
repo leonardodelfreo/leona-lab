@@ -1777,6 +1777,110 @@ th {
   border-color: rgba(63, 191, 127, 0.4);
 }
 
+.news-controls .news-filter-block {
+  min-width: min(280px, 100%);
+}
+
+.news-controls input[type="search"] {
+  width: 100%;
+  min-width: 180px;
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.news-list-card {
+  margin-top: 10px;
+}
+
+.news-list-header {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.news-list-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.news-list {
+  display: grid;
+  gap: 10px;
+}
+
+.news-item {
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  background: #000000;
+  padding: 12px 14px;
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+
+.news-item:hover {
+  border-color: rgba(224, 192, 74, 0.45);
+  transform: translateY(-1px);
+}
+
+.news-item-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.news-item-source {
+  color: var(--accent-gold);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.news-item-time {
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.news-item-title {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+  color: #ffffff;
+}
+
+.news-item-summary {
+  margin: 8px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.news-item-actions {
+  margin-top: 10px;
+}
+
+.news-item-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent-gold);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid rgba(224, 192, 74, 0.45);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.news-item-link:hover {
+  background: rgba(224, 192, 74, 0.12);
+}
+
 .signal-slider-wrap {
   min-width: 260px;
   display: flex;
@@ -1908,6 +2012,12 @@ th {
   padding-right: 2px;
 }
 
+#newsPage.page-view.active {
+  display: block;
+  overflow: auto;
+  padding-right: 2px;
+}
+
 #valuationPage.page-view.active {
   display: block;
   overflow: auto;
@@ -1997,6 +2107,14 @@ th {
 }
 
 #macroPage .card:last-child {
+  margin-bottom: 0;
+}
+
+#newsPage .card {
+  margin-bottom: 10px;
+}
+
+#newsPage .card:last-child {
   margin-bottom: 0;
 }
 
@@ -2170,6 +2288,11 @@ th {
   }
 
   #macroPage.page-view.active {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  #newsPage.page-view.active {
     overflow: visible;
     padding-right: 0;
   }
