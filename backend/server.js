@@ -2635,6 +2635,13 @@ const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`);
   const pathname = requestUrl.pathname;
 
+  if (pathname === "/favicon.ico") {
+    return serveStatic(req, res, "/assets/favicon.ico");
+  }
+  if (pathname === "/apple-touch-icon.png" || pathname === "/apple-touch-icon-precomposed.png") {
+    return serveStatic(req, res, "/assets/apple-touch-icon.png");
+  }
+
   if (pathname === "/") {
     return serveStatic(req, res, "/landing.html");
   }
