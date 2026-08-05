@@ -8,7 +8,7 @@
     <link rel="icon" href="/assets/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" href="/assets/favicon-32.png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=20260804-valuation-02" />
+    <link rel="stylesheet" href="/styles.css?v=20260805-pageinfo-05" />
   </head>
   <body>
     <main class="app-shell">
@@ -72,11 +72,32 @@
       </header>
 
       <section class="page-tabs card">
-        <button id="tabCot" class="page-tab-btn active">COT</button>
-        <button id="tabSeasonality" class="page-tab-btn">Stagionalita</button>
-        <button id="tabSignals" class="page-tab-btn">Segnali</button>
-        <button id="tabMacro" class="page-tab-btn">Macro</button>
-        <button id="tabValuation" class="page-tab-btn">Valuation</button>
+        <div class="page-tabs-group page-tabs-analysis" aria-label="Analisi">
+          <span class="page-tabs-label">Analisi</span>
+          <div class="page-tab-with-info">
+            <button id="tabCot" class="page-tab-btn active" type="button">COT</button>
+            <button type="button" class="page-info-dot" data-info="cot" title="Come usare COT" aria-label="Come usare la pagina COT">i</button>
+          </div>
+          <div class="page-tab-with-info">
+            <button id="tabSeasonality" class="page-tab-btn" type="button">Stagionalita</button>
+            <button type="button" class="page-info-dot" data-info="seasonality" title="Come usare Stagionalita" aria-label="Come usare la pagina Stagionalita">i</button>
+          </div>
+          <div class="page-tab-with-info">
+            <button id="tabMacro" class="page-tab-btn" type="button">Macro</button>
+            <button type="button" class="page-info-dot" data-info="macro" title="Come usare Macro" aria-label="Come usare il calendario Macro">i</button>
+          </div>
+          <div class="page-tab-with-info">
+            <button id="tabValuation" class="page-tab-btn" type="button">Valuation</button>
+            <button type="button" class="page-info-dot" data-info="valuation" title="Come usare Valuation" aria-label="Come usare la pagina Valuation">i</button>
+          </div>
+        </div>
+        <div class="page-tabs-sep" aria-hidden="true"></div>
+        <div class="page-tabs-group page-tabs-signals" aria-label="Segnali">
+          <div class="page-tab-with-info">
+            <button id="tabSignals" class="page-tab-btn page-tab-btn-signals" type="button">Segnali</button>
+            <button type="button" class="page-info-dot" data-info="signals" title="Come usare Segnali" aria-label="Come usare la pagina Segnali">i</button>
+          </div>
+        </div>
       </section>
 
       <section id="cotPage" class="page-view active">
@@ -679,10 +700,20 @@
       <section class="card status-card">
         <small id="lastUpdated" class="muted">Ultimo aggiornamento: --</small>
         <p id="status">Caricamento dati...</p>
-        <p class="muted">Theme build: 20260804-valuation-02</p>
+        <p class="muted">Theme build: 20260805-pageinfo-05</p>
       </section>
     </main>
 
-    <script src="./app.js?v=20260804-valuation-02"></script>
+    <dialog id="pageInfoDialog" class="page-info-dialog">
+      <div class="page-info-dialog-inner">
+        <header class="page-info-header">
+          <h2 id="pageInfoTitle">Guida</h2>
+          <button id="pageInfoClose" type="button" class="page-info-close" aria-label="Chiudi">×</button>
+        </header>
+        <div id="pageInfoBody" class="page-info-body"></div>
+      </div>
+    </dialog>
+
+    <script src="./app.js?v=20260805-pageinfo-05"></script>
   </body>
 </html>

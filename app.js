@@ -4121,7 +4121,7 @@ function upsertCategoryChart(stateKey, canvasId, label, color, categorySeries, m
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { labels: { color: "#ecf5ff", boxWidth: 10 } },
+        legend: { labels: { color: "#ffffff", boxWidth: 10 } },
         tooltip: {
           callbacks: {
             label: (ctx) => {
@@ -4154,10 +4154,10 @@ function upsertCategoryChart(stateKey, canvasId, label, color, categorySeries, m
         },
       },
       scales: {
-        x: { ticks: { color: "#9fb8cc" }, grid: { color: "rgba(61,102,139,0.32)" } },
+        x: { ticks: { color: "#e8edf5" }, grid: { color: "rgba(255,255,255,0.08)" } },
         y: {
-          ticks: { color: "#9fb8cc", callback: yTickFormatter },
-          grid: { color: "rgba(61,102,139,0.32)" },
+          ticks: { color: "#e8edf5", callback: yTickFormatter },
+          grid: { color: "rgba(255,255,255,0.08)" },
           min: metric === "cotIndex" ? 0 : undefined,
           max: metric === "cotIndex" ? 100 : undefined,
         },
@@ -4309,7 +4309,7 @@ function upsertSupremeCotChart(filteredCot, selectedCategory = "nonCommercial") 
         legend: {
           display: true,
           labels: {
-            color: "#d1d4dc",
+            color: "#ffffff",
             boxWidth: 10,
             filter: (item) => item.text !== "Zero",
           },
@@ -4344,22 +4344,22 @@ function upsertSupremeCotChart(filteredCot, selectedCategory = "nonCommercial") 
       scales: {
         x: {
           ticks: {
-            color: "#9aa4b2",
+            color: "#e8edf5",
             maxRotation: 0,
             autoSkip: true,
             maxTicksLimit: 10,
           },
-          grid: { color: "rgba(31,42,55,0.9)" },
+          grid: { color: "rgba(255,255,255,0.08)" },
         },
         y: {
           title: {
             display: true,
             text: "Net positions (contracts)",
-            color: "#9aa4b2",
+            color: "#e8edf5",
             font: { size: 11 },
           },
-          ticks: { color: "#9aa4b2", callback: (v) => fmtInt(v) },
-          grid: { color: "rgba(31,42,55,0.9)" },
+          ticks: { color: "#e8edf5", callback: (v) => fmtInt(v) },
+          grid: { color: "rgba(255,255,255,0.08)" },
         },
       },
     },
@@ -4541,7 +4541,7 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
         plugins: {
           legend: {
             labels: {
-              color: "#ecf5ff",
+              color: "#ffffff",
               usePointStyle: true,
               filter: (item) => item.text !== "Zero",
             },
@@ -4618,7 +4618,7 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
               axis.ticks = idxs.map((value) => ({ value }));
             },
             ticks: {
-              color: "#9fb8cc",
+              color: "#e8edf5",
               autoSkip: false,
               maxRotation: 0,
               minRotation: 0,
@@ -4631,18 +4631,18 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
                 return String(label);
               },
             },
-            grid: { color: "rgba(61,102,139,0.22)" },
+            grid: { color: "rgba(255,255,255,0.06)" },
           },
           y: {
             ticks: {
-              color: "#9fb8cc",
+              color: "#e8edf5",
               callback: (v) => `${fmtNum(v, 1)}%`,
             },
-            grid: { color: "rgba(61,102,139,0.28)" },
+            grid: { color: "rgba(255,255,255,0.08)" },
             title: {
               display: true,
               text: "Log-return cumulato medio (%)",
-              color: "#9fb8cc",
+              color: "#e8edf5",
               font: { size: 11 },
             },
           },
@@ -4673,8 +4673,8 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
           type: "bar",
           label: "Body Q1/Q3 %",
           data: seasonalityStats.map((s) => [s.q1, s.q3]),
-          backgroundColor: seasonalityStats.map((s) => (s.median >= 0 ? "rgba(47,182,178,0.6)" : "rgba(227,138,90,0.6)")),
-          borderColor: seasonalityStats.map((s) => (s.median >= 0 ? "#2fb6b2" : "#e38a5a")),
+          backgroundColor: seasonalityStats.map((s) => (s.median >= 0 ? "rgba(34,212,107,0.55)" : "rgba(255,92,92,0.55)")),
+          borderColor: seasonalityStats.map((s) => (s.median >= 0 ? "#22d46b" : "#ff5c5c")),
           borderWidth: 1.3,
           barThickness: 18,
         },
@@ -4694,7 +4694,7 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: "#ecf5ff" } },
+        legend: { labels: { color: "#ffffff" } },
         tooltip: {
           callbacks: {
             label: (ctx) => {
@@ -4719,10 +4719,10 @@ function updateSeasonalityChart(seasonality, seasonalityStats, seasonalityPath) 
         },
       },
       scales: {
-        x: { ticks: { color: "#9fb8cc" }, grid: { color: "rgba(61,102,139,0.32)" } },
+        x: { ticks: { color: "#e8edf5" }, grid: { color: "rgba(255,255,255,0.08)" } },
         y: {
-          ticks: { color: "#9fb8cc", callback: (v) => `${v}%` },
-          grid: { color: "rgba(61,102,139,0.32)" },
+          ticks: { color: "#e8edf5", callback: (v) => `${v}%` },
+          grid: { color: "rgba(255,255,255,0.08)" },
         },
       },
     },
@@ -5581,15 +5581,15 @@ function filterPricesByTimeframe(prices) {
 function setValuationKpi(el, labelEl, value, label) {
   if (labelEl) labelEl.textContent = label || "--";
   if (!el) return;
-  el.classList.remove("val-over", "val-under", "val-neutral");
+  el.classList.remove("val-over", "val-under", "val-neutral", "val-pos", "val-neg");
   if (!Number.isFinite(value)) {
     el.textContent = "--";
     el.classList.add("val-neutral");
     return;
   }
   el.textContent = fmtNum(value, 1);
-  if (value >= 75) el.classList.add("val-over");
-  else if (value <= -75) el.classList.add("val-under");
+  if (value > 0) el.classList.add("val-pos");
+  else if (value < 0) el.classList.add("val-neg");
   else el.classList.add("val-neutral");
 }
 
@@ -5643,7 +5643,7 @@ function updateValuationChart(dates, rescaledSeries, labels, colorIndexes = null
       plugins: {
         legend: {
           display: true,
-          labels: { color: "#cfcfcf", boxWidth: 12, padding: 12 },
+          labels: { color: "#ffffff", boxWidth: 12, padding: 12 },
         },
         tooltip: {
           callbacks: {
@@ -5667,7 +5667,7 @@ function updateValuationChart(dates, rescaledSeries, labels, colorIndexes = null
       scales: {
         x: {
           ticks: {
-            color: "#9a9a9a",
+            color: "#e8edf5",
             maxTicksLimit: xTickLimit,
             maxRotation: 0,
             autoSkip: true,
@@ -5680,7 +5680,7 @@ function updateValuationChart(dates, rescaledSeries, labels, colorIndexes = null
           max: 100,
           grace: 0,
           ticks: {
-            color: "#9a9a9a",
+            color: "#e8edf5",
             stepSize: 25,
             callback: (v) => String(v),
           },
@@ -6245,6 +6245,118 @@ function wireEvents() {
     setActivePage("valuation");
     savePrefs();
   });
+
+  const PAGE_INFO = {
+    cot: {
+      title: "Come leggere COT",
+      html: `
+        <p><strong>Regola base:</strong> fai il contrario dei Retail e segui i Non-Commercial.</p>
+        <ul>
+          <li><strong>Setup long:</strong> Retail agli estremi short + Non-Commercial che stanno aumentando le posizioni → bias long.</li>
+          <li><strong>Setup short:</strong> Retail agli estremi long + Non-Commercial che stanno togliendo posizioni → bias short.</li>
+          <li><strong>Commercial (materie prime):</strong> agli estremi alti = buon punto per comprare; agli estremi bassi = buon punto per vendere.</li>
+        </ul>
+        <p class="info-tip"><strong>Contesto:</strong> non e un obbligo automatico. Incrocia sempre con prezzo, stagionalita e quadro macro prima di decidere size e timing.</p>
+      `,
+    },
+    seasonality: {
+      title: "Come usare Stagionalita",
+      html: `
+        <p><strong>A cosa serve:</strong> vedere come l'asset si comporta mediamente nei mesi e nei giorni del mese (timing esclusivo).</p>
+        <ul>
+          <li><strong>Finestra anni:</strong> 10Y e un buon default; ALL aumenta robustezza ma puo mescolare regimi diversi.</li>
+          <li><strong>Supreme Seasonality:</strong> curva cumulata — punta i punti di forza/debolezza stagionale.</li>
+          <li><strong>Timing giorni:</strong> giorno long e giorno short piu favorevoli per ogni mese, su dati reali.</li>
+          <li><strong>Mese ingresso / orizzonte:</strong> allinea la vista al trade che stai valutando.</li>
+        </ul>
+        <p class="info-tip"><strong>Uso operativo:</strong> stagione e timing danno il "quando". Non basare il trade solo su questo: crocia con COT e bias.</p>
+      `,
+    },
+    signals: {
+      title: "Come usare Segnali",
+      html: `
+        <p><strong>A cosa serve:</strong> e il riassunto operativo del desk (COT + stagione + momentum) in un bias unico.</p>
+        <ul>
+          <li><strong>Bias (0–100) / Stato:</strong> Bullish, Bearish o Neutral (WAIT). Non e un ordine automatico.</li>
+          <li><strong>Playbook:</strong> traduzione pratica in <span class="bias-long">LONG</span>, <span class="bias-short">SHORT</span> o WAIT/RANGE.</li>
+          <li><strong>Qualita dati:</strong> se e bassa, riduci size e fiducia sul segnale.</li>
+          <li><strong>Cosa pesa di piu:</strong> ti dice quale pezzo (COT, stagione, ecc.) sta guidando il bias.</li>
+          <li><strong>Execution / risk:</strong> livelli e sizing di supporto — sempre da validare sul tuo setup.</li>
+        </ul>
+        <p class="info-tip"><strong>Regola d'oro:</strong> prima contestualizza con COT, stagionalita e Valuation; poi usa Segnali come checklist finale, non come unico filtro.</p>
+      `,
+    },
+    macro: {
+      title: "Come usare Macro / Calendario",
+      html: `
+        <p><strong>A cosa serve:</strong> pianificare intorno agli eventi che possono muovere il mercato (CPI, FOMC, NFP, ecc.).</p>
+        <ul>
+          <li><strong>Linea intorno alla notizia:</strong> ogni evento e circondato da un bordo colorato in base all'importanza.
+            <ul>
+              <li><strong>Alta</strong> → bordo rosso</li>
+              <li><strong>Media</strong> → bordo oro</li>
+              <li><strong>Bassa</strong> → bordo verde</li>
+            </ul>
+          </li>
+          <li><strong>Filtri:</strong> valuta, importanza e categoria per vedere solo cio che conta per il tuo asset.</li>
+          <li><strong>Badge feed:</strong> LIVE ok · FAILOVER fonte alternativa · CACHE dato salvato (piu cautela).</li>
+        </ul>
+        <p class="info-tip"><strong>Uso operativo:</strong> sulle news ad alta importanza riduci size o evita di forzare entry; usa il calendario per sapere quando il contesto puo cambiare in fretta.</p>
+      `,
+    },
+    valuation: {
+      title: "Come usare Valuation",
+      html: `
+        <p><strong>Quale comparabile usare:</strong></p>
+        <ul>
+          <li><strong>Forex</strong> → guarda il <strong>DXY</strong></li>
+          <li><strong>Metalli e agricole</strong> → guarda l'<strong>oro</strong></li>
+          <li><strong>Indici</strong> → guarda <strong>ZB1</strong></li>
+        </ul>
+        <p><strong>Lettura della linea:</strong></p>
+        <ul>
+          <li><strong>Sopra +75:</strong> l'asset scelto risulta stirato al rialzo vs il comparabile → bias <span class="bias-short">short</span> (da contestualizzare).</li>
+          <li><strong>Sotto −75:</strong> l'asset risulta stirato al ribasso vs il comparabile → bias <span class="bias-long">long</span> (da contestualizzare).</li>
+          <li><strong>Tre linee sotto:</strong> se tutte e tre sono sotto → piu forza per <span class="bias-long">comprare</span>.</li>
+          <li><strong>Tre linee sopra:</strong> se tutte e tre sono sopra → piu forza per <span class="bias-short">vendere</span>.</li>
+        </ul>
+        <p class="info-tip"><strong>Contesto:</strong> non e un obbligo. Valuation indica forza relativa estrema: conferma sempre con COT, stagionalita e struttura del prezzo.</p>
+      `,
+    },
+  };
+
+  const pageInfoDialog = document.getElementById("pageInfoDialog");
+  const pageInfoTitle = document.getElementById("pageInfoTitle");
+  const pageInfoBody = document.getElementById("pageInfoBody");
+  const pageInfoClose = document.getElementById("pageInfoClose");
+
+  function openPageInfo(key) {
+    const entry = PAGE_INFO[key];
+    if (!entry || !pageInfoDialog) return;
+    if (pageInfoTitle) pageInfoTitle.textContent = entry.title;
+    if (pageInfoBody) pageInfoBody.innerHTML = entry.html;
+    if (typeof pageInfoDialog.showModal === "function") pageInfoDialog.showModal();
+    else pageInfoDialog.setAttribute("open", "");
+  }
+
+  function closePageInfo() {
+    if (!pageInfoDialog) return;
+    if (typeof pageInfoDialog.close === "function") pageInfoDialog.close();
+    else pageInfoDialog.removeAttribute("open");
+  }
+
+  document.querySelectorAll(".page-info-dot").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openPageInfo(btn.getAttribute("data-info"));
+    });
+  });
+  pageInfoClose?.addEventListener("click", () => closePageInfo());
+  pageInfoDialog?.addEventListener("click", (e) => {
+    if (e.target === pageInfoDialog) closePageInfo();
+  });
+
   valuationRefreshBtn?.addEventListener("click", () => {
     loadValuationAndRender({ force: true }).catch(() => {});
     savePrefs();
