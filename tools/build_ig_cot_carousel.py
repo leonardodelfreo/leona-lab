@@ -1,0 +1,329 @@
+"""Dense IG carousel — big type, full frame, real LL logo."""
+from __future__ import annotations
+
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "assets" / "instagram-carousels"
+LOGO = ROOT / "assets" / "logo-ll.png"
+W = H = 1080
+BG, GOLD, WHITE, MUTED = (0, 0, 0), (212, 175, 55), (255, 255, 255), (168, 168, 168)
+LINE = (48, 48, 48)
+CARD = (14, 14, 14)
+GREEN, RED = (34, 212, 107), (255, 92, 92)
+FOOTER = "Leona.Lab  ·  leona-lab.com"
+TARGET = 0.92
+MAX_SCALE = 1.65
+
+
+def font(size: int, bold: bool = False):
+    for name in (
+        ("segoeuib.ttf", "seguisb.ttf") if bold else ("segoeui.ttf", "arial.ttf")
+    ):
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def text_w(draw, text, fnt):
+    return draw.textbbox((0, 0), text, font=fnt)[2]
+
+
+def wrap(draw, text, fnt, max_w):
+    words = text.split()
+    lines, cur = [], ""
+    for word in words:
+        test = f"{cur} {word}".strip()
+        if text_w(draw, test, fnt) <= max_w:
+            cur = test
+        else:
+            if cur:
+                lines.append(cur)
+            cur = word
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def content_bbox(img: Image.Image):
+    px = img.load()
+    xs, ys = [], []
+    for y in range(img.height):
+        for x in range(img.width):
+            if px[x, y][:3] != BG:
+                xs.append(x)
+                ys.append(y)
+    if not xs:
+        return 0, 0, img.width, img.height
+    return min(xs), min(ys), max(xs) + 1, max(ys) + 1
+
+
+def finalize(content: Image.Image, path: Path, mark: str):
+    usable_top, usable_bot = 118, 56
+    usable_h = H - usable_top - usable_bot
+    usable_w = W - 56
+    x0, y0, x1, y1 = content_bbox(content)
+    cw, ch = max(1, x1 - x0), max(1, y1 - y0)
+    scale = min(usable_w / cw, usable_h / ch, MAX_SCALE)
+    if scale < 1.0:
+        scale = 1.0
+    nw, nh = max(1, int(cw * scale)), max(1, int(ch * scale))
+    cropped = content.crop((x0, y0, x1, y1)).resize((nw, nh), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGB", (W, H), BG)
+    canvas.paste(cropped, ((W - nw) // 2, usable_top + (usable_h - nh) // 2))
+    draw = ImageDraw.Draw(canvas)
+    logo = Image.open(LOGO).convert("RGBA").resize((78, 78), Image.Resampling.LANCZOS)
+    canvas.paste(logo, ((W - 78) // 2, 18), logo)
+    ff = font(20, True)
+    draw.text(((W - text_w(draw, FOOTER, ff)) // 2, H - 42), FOOTER, font=ff, fill=GOLD)
+    if mark:
+        mf = font(18, True)
+        draw.text((W - 48 - text_w(draw, mark, mf), H - 42), mark, font=mf, fill=(90, 90, 90))
+    canvas.save(path, "PNG")
+    print(f"saved {path.name} scale={scale:.2f} fill_h={nh/H:.2f}")
+
+
+def title_block(draw, y, kicker, title, wrap_w=820):
+    kf, tf = font(26, True), font(64, True)
+    draw.text(((W - text_w(draw, kicker, kf)) // 2, y), kicker, font=kf, fill=GOLD)
+    y += 48
+    for line in wrap(draw, title, tf, wrap_w):
+        draw.text(((W - text_w(draw, line, tf)) // 2, y), line, font=tf, fill=WHITE)
+        y += 74
+    return y + 18
+
+
+def body_lines(draw, y, lines, size=36, fill=MUTED, gap=52, wrap_w=820, bold=False):
+    fnt = font(size, bold)
+    for raw in lines:
+        for line in wrap(draw, raw, fnt, wrap_w):
+            draw.text(((W - text_w(draw, line, fnt)) // 2, y), line, font=fnt, fill=fill)
+            y += gap
+        y += 10
+    return y
+
+
+def card(draw, x, y, w, h, title, body, accent, title_size=36, body_size=28):
+    draw.rounded_rectangle((x, y, x + w, y + h), radius=22, fill=CARD, outline=LINE, width=3)
+    draw.rectangle((x, y, x + 10, y + h), fill=accent)
+    tf, bf = font(title_size, True), font(body_size)
+    draw.text((x + 28, y + 28), title, font=tf, fill=accent)
+    ty = y + 78
+    for line in wrap(draw, body, bf, w - 56):
+        draw.text((x + 28, ty), line, font=bf, fill=WHITE)
+        ty += 40
+
+
+def rule(draw, y):
+    draw.rectangle((120, y, W - 120, y + 3), fill=GOLD)
+    return y + 36
+
+
+def slide_01():
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+    y = 40
+    d.text(((W - text_w(d, "COT REPORT", font(28, True))) // 2, y), "COT REPORT", font=font(28, True), fill=GOLD)
+    y += 70
+    for line in wrap(d, "Perché servono i COT Report?", font(72, True), 860):
+        d.text(((W - text_w(d, line, font(72, True))) // 2, y), line, font=font(72, True), fill=WHITE)
+        y += 86
+    y = rule(d, y + 10)
+    y = body_lines(
+        d,
+        y,
+        [
+            "Il prezzo ti dice dove sei.",
+            "I COT ti dicono chi sta spingendo il mercato.",
+            "Una lettura settimanale per capire il contesto,",
+            "non per inseguire il rumore del momento.",
+        ],
+        size=38,
+        fill=MUTED,
+        gap=54,
+    )
+    y += 30
+    d.rounded_rectangle((90, y, W - 90, y + 150), radius=22, fill=CARD, outline=LINE, width=3)
+    bf = font(34, True)
+    for i, line in enumerate(["Chi compra. Chi vende.", "Chi è estremo. Chi ha ancora spazio."]):
+        d.text(((W - text_w(d, line, bf)) // 2, y + 28 + i * 52), line, font=bf, fill=GOLD)
+    finalize(img, OUT / "ig-cot-01-cover.png", "1 / 7")
+
+
+def slide_02():
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+    y = title_block(d, 20, "01  ·  COSA SONO", "Una radiografia del mercato")
+    y = rule(d, y)
+    y = body_lines(
+        d,
+        y,
+        [
+            "Ogni venerdì la CFTC pubblica le posizioni",
+            "aperte dei grandi operatori.",
+            "Non è un segnale automatico:",
+            "è una mappa di chi è long e chi è short.",
+        ],
+        size=36,
+        gap=50,
+    )
+    y += 20
+    items = [
+        ("Retail", "Trader piccoli e retail"),
+        ("Non-Commercial", "Fondi e speculatori"),
+        ("Commercial", "Hedger e produttori"),
+    ]
+    for title, sub in items:
+        d.rounded_rectangle((90, y, W - 90, y + 110), radius=20, fill=CARD, outline=LINE, width=3)
+        d.ellipse((118, y + 38, 150, y + 70), fill=GOLD)
+        d.text((178, y + 22), title, font=font(36, True), fill=WHITE)
+        d.text((178, y + 66), sub, font=font(28), fill=MUTED)
+        y += 128
+    finalize(img, OUT / "ig-cot-02-cosa-sono.png", "2 / 7")
+
+
+def slide_03():
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+    y = title_block(d, 20, "02  ·  IL PROBLEMA", "Il prezzo non basta")
+    y = rule(d, y)
+    y = body_lines(
+        d,
+        y,
+        [
+            "Due mercati possono avere lo stesso grafico",
+            "ma posizioni completamente diverse.",
+            "Senza COT rischi di leggere solo la superficie.",
+        ],
+        size=36,
+        gap=52,
+    )
+    y += 24
+    box_h = 280
+    d.rounded_rectangle((90, y, W - 90, y + box_h), radius=22, fill=CARD, outline=LINE, width=3)
+    d.text((120, y + 36), "Cosa manca al solo prezzo", font=font(34, True), fill=GOLD)
+    for i, line in enumerate(
+        [
+            "• chi sta davvero spingendo",
+            "• chi è già troppo carico",
+            "• dove il crowding è pericoloso",
+            "• il contesto dietro la candela",
+        ]
+    ):
+        d.text((120, y + 100 + i * 42), line, font=font(32), fill=WHITE)
+    finalize(img, OUT / "ig-cot-03-perche.png", "3 / 7")
+
+
+def slide_04():
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+    y = title_block(d, 10, "03  ·  LA REGOLA BASE", "Retail vs Non-Commercial", wrap_w=860)
+    y = rule(d, y)
+    card(d, 70, y, 940, 250, "Retail", "Spesso sbaglia vicino agli estremi. Quando è troppo long o troppo short, il mercato spesso fa il contrario.", RED, 40, 30)
+    y += 278
+    card(d, 70, y, 940, 250, "Non-Commercial", "Fondi e speculatori. Meglio allinearci al loro flusso, non al retail.", GREEN, 40, 30)
+    y += 278
+    body_lines(d, y, ["Regola pratica: meno retail, più smart money."], size=32, fill=GOLD, gap=44, bold=True)
+    finalize(img, OUT / "ig-cot-04-regola.png", "4 / 7")
+
+
+def slide_05():
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+    y = title_block(d, 20, "04  ·  COMMODITIES", "Occhio ai Commercial")
+    y = rule(d, y)
+    y = body_lines(
+        d,
+        y,
+        [
+            "Su oro, petrolio e materie prime",
+            "i Commercial contano di più.",
+            "Sono hedger: conoscano il sottostante",
+            "e si muovono per coprire il rischio reale.",
+        ],
+        size=36,
+        gap=50,
+    )
+    y += 18
+    d.rounded_rectangle((90, y, W - 90, y + 300), radius=22, fill=CARD, outline=LINE, width=3)
+    d.text((120, y + 36), "Quando diventano estremi", font=font(34, True), fill=GOLD)
+    for i, line in enumerate(
+        [
+            "• net long elevati → attenzione al ribasso",
+            "• net short elevati → attenzione al rialzo",
+            "• non è un trigger: è un avviso di contesto",
+            "• va letto insieme a prezzo e stagione",
+        ]
+    ):
+        d.text((120, y + 100 + i * 44), line, font=font(30), fill=WHITE)
+    finalize(img, OUT / "ig-cot-05-commercial.png", "5 / 7")
+
+
+def slide_06():
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+    y = title_block(d, 10, "05  ·  COME USARLI", "COT = contesto, non ordine")
+    y = rule(d, y)
+    steps = [
+        ("1", "Guarda gli estremi", "Dove le posizioni sono troppo cariche"),
+        ("2", "Confronta le categorie", "Retail, Non-Commercial, Commercial"),
+        ("3", "Incrocia col prezzo", "Solo dopo costruisci la bias"),
+    ]
+    for num, title, sub in steps:
+        d.rounded_rectangle((90, y, W - 90, y + 150), radius=20, fill=CARD, outline=LINE, width=3)
+        d.ellipse((118, y + 40, 178, y + 100), outline=GOLD, width=3)
+        d.text((118 + (60 - text_w(d, num, font(32, True))) // 2, y + 52), num, font=font(32, True), fill=GOLD)
+        d.text((210, y + 36), title, font=font(36, True), fill=WHITE)
+        d.text((210, y + 86), sub, font=font(28), fill=MUTED)
+        y += 168
+    finalize(img, OUT / "ig-cot-06-come-usarli.png", "6 / 7")
+
+
+def slide_07():
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+    y = 30
+    d.text(((W - text_w(d, "LEONA.LAB", font(28, True))) // 2, y), "LEONA.LAB", font=font(28, True), fill=GOLD)
+    y += 70
+    for line in wrap(d, "Vuoi leggerli senza perderti?", font(64, True), 860):
+        d.text(((W - text_w(d, line, font(64, True))) // 2, y), line, font=font(64, True), fill=WHITE)
+        y += 78
+    y = rule(d, y + 8)
+    y = body_lines(
+        d,
+        y,
+        [
+            "Su Leona.Lab trovi COT, stagionalità,",
+            "valuation e segnali in un’unica vista.",
+            "Meno rumore. Più contesto.",
+        ],
+        size=36,
+        gap=52,
+    )
+    y += 24
+    d.rounded_rectangle((140, y, W - 140, y + 120), radius=22, fill=GOLD)
+    cta = "Apri leona-lab.com"
+    cf = font(40, True)
+    d.text(((W - text_w(d, cta, cf)) // 2, y + 36), cta, font=cf, fill=BG)
+    y += 160
+    body_lines(d, y, ["Analisi settimanale · mercato reale"], size=30, fill=MUTED, gap=44)
+    finalize(img, OUT / "ig-cot-07-cta.png", "7 / 7")
+
+
+def main():
+    OUT.mkdir(parents=True, exist_ok=True)
+    slide_01()
+    slide_02()
+    slide_03()
+    slide_04()
+    slide_05()
+    slide_06()
+    slide_07()
+    print("DONE", OUT)
+
+
+if __name__ == "__main__":
+    main()

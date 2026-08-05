@@ -149,6 +149,16 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.landing-grid-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1200px) {
+  .landing-grid-5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .feature-card {
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -341,6 +351,7 @@ body {
   }
 
   .landing-grid-4,
+  .landing-grid-5,
   .landing-steps-row {
     grid-template-columns: 1fr;
   }
@@ -673,6 +684,10 @@ body {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-top: 8px;
+}
+
+.landing-preview-grid-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .preview-item {
@@ -2066,9 +2081,11 @@ th {
 
   .landing-grid,
   .landing-preview-grid,
+  .landing-preview-grid-4,
   .landing-auth-grid,
   .about-highlights,
   .landing-grid-4,
+  .landing-grid-5,
   .landing-steps-row {
     grid-template-columns: 1fr;
   }
