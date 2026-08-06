@@ -164,7 +164,7 @@ const ASSET_CATALOG = [
   { id: "XAUUSD", label: "Gold Spot", group: "Metals", yahooSymbols: ["XAUUSD=X", "GC=F"], stooqSymbol: "xauusd", tvFeeds: [{ market: "cfd", ticker: "TVC:GOLD" }, { market: "forex", ticker: "OANDA:XAUUSD" }], cotMarket: "GOLD - COMMODITY EXCHANGE INC." },
   { id: "XAGUSD", label: "Silver Spot", group: "Metals", yahooSymbols: ["XAGUSD=X", "SI=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:SILVER" }, { market: "forex", ticker: "OANDA:XAGUSD" }], cotMarket: "SILVER - COMMODITY EXCHANGE INC." },
   { id: "XPTUSD", label: "Platinum Spot", group: "Metals", yahooSymbols: ["PL=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:PLATINUM" }], cotMarket: "PLATINUM - NEW YORK MERCANTILE EXCHANGE" },
-  { id: "DXY", label: "US Dollar Index", group: "Indices", yahooSymbols: ["DX-Y.NYB", "DX=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:DXY" }, { market: "futures", ticker: "ICEUS:DX1!" }], cotMarket: "USD INDEX - ICE FUTURES U.S.", cotMarkets: ["USD INDEX - ICE FUTURES U.S.", "U.S. DOLLAR INDEX - ICE FUTURES U.S."] },
+  { id: "DXY", label: "US Dollar Index", group: "Indices", yahooSymbols: ["DX=F", "DX-Y.NYB"], tvFeeds: [{ market: "futures", ticker: "ICEUS:DX1!" }, { market: "cfd", ticker: "TVC:DXY" }], cotMarket: "USD INDEX - ICE FUTURES U.S.", cotMarkets: ["USD INDEX - ICE FUTURES U.S.", "U.S. DOLLAR INDEX - ICE FUTURES U.S."] },
   { id: "EURUSD", label: "Euro / US Dollar", group: "Forex", yahooSymbols: ["EURUSD=X", "6E=F"], tvFeeds: [{ market: "forex", ticker: "FX:EURUSD" }, { market: "forex", ticker: "OANDA:EURUSD" }], cotMarket: "EURO FX - CHICAGO MERCANTILE EXCHANGE" },
   { id: "GBPUSD", label: "British Pound / US Dollar", group: "Forex", yahooSymbols: ["GBPUSD=X", "6B=F"], tvFeeds: [{ market: "forex", ticker: "FX:GBPUSD" }, { market: "forex", ticker: "OANDA:GBPUSD" }], cotMarket: "BRITISH POUND - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["BRITISH POUND - CHICAGO MERCANTILE EXCHANGE", "BRITISH POUND STERLING - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "USDJPY", label: "US Dollar / Japanese Yen", group: "Forex", yahooSymbols: ["JPY=X", "6J=F"], tvFeeds: [{ market: "forex", ticker: "FX:USDJPY" }, { market: "forex", ticker: "OANDA:USDJPY" }], cotMarket: "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE" },
@@ -199,31 +199,39 @@ const ASSET_CATALOG = [
   { id: "COCOA", label: "Cocoa", group: "Agriculture", yahooSymbols: ["CC=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CC1!" }], cotMarket: "COCOA - ICE FUTURES U.S." },
   { id: "OATS", label: "Oats", group: "Agriculture", yahooSymbols: ["ZO=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZO1!" }], cotMarket: "OATS - CHICAGO BOARD OF TRADE" },
   // Hidden from picker groups; used by Valuation tab comps (backend price series).
-  { id: "ZB1", label: "US Treasury Bond Futures", group: "_valuation", yahooSymbols: ["ZB=F", "ZN=F", "TLT"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZB1!" }], cotMarket: null },
+  { id: "ZB1", label: "US Treasury Bond Futures", group: "_valuation", yahooSymbols: ["ZB=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZB1!" }], cotMarket: null },
+  // Valuation gold comparable ≈ TradingView GC1! (COMEX continuous). Hidden from main picker.
+  { id: "GC1", label: "Gold Futures", group: "_valuation", yahooSymbols: ["GC=F"], tvFeeds: [{ market: "futures", ticker: "COMEX:GC1!" }], cotMarket: null },
 ];
 
-/** Comparables for Supreme Valuation (TradingView defaults: DXY, GC1!, ZB1!). */
+/** Comparables for Supreme Valuation — Option A: Yahoo futures closest to TV DXY/GC1!/ZB1!. */
 const VALUATION_COMP_ASSETS = {
   DXY: {
     id: "DXY",
-    label: "DXY",
-    yahooSymbols: ["DX-Y.NYB", "DX=F"],
-    tvFeeds: [{ market: "cfd", ticker: "TVC:DXY" }, { market: "futures", ticker: "ICEUS:DX1!" }],
+    label: "DXY (DX=F)",
+    yahooSymbols: ["DX=F"],
+    tvFeeds: [{ market: "futures", ticker: "ICEUS:DX1!" }, { market: "cfd", ticker: "TVC:DXY" }],
   },
-  XAUUSD: {
-    id: "XAUUSD",
-    label: "Gold (GC1!)",
-    yahooSymbols: ["GC=F", "XAUUSD=X"],
-    stooqSymbol: "xauusd",
-    tvFeeds: [{ market: "cfd", ticker: "TVC:GOLD" }, { market: "forex", ticker: "OANDA:XAUUSD" }],
+  GC1: {
+    id: "GC1",
+    label: "Gold (GC=F)",
+    yahooSymbols: ["GC=F"],
+    tvFeeds: [{ market: "futures", ticker: "COMEX:GC1!" }],
   },
   ZB1: {
     id: "ZB1",
-    label: "Bonds (ZB1!)",
-    yahooSymbols: ["ZB=F", "ZN=F", "TLT"],
+    label: "Bonds (ZB=F)",
+    yahooSymbols: ["ZB=F"],
     tvFeeds: [{ market: "futures", ticker: "CBOT:ZB1!" }],
   },
 };
+
+function normalizeValuationCompId(id) {
+  const key = String(id || "").toUpperCase();
+  if (key === "XAUUSD") return "GC1";
+  if (key === "GC1" || key === "DXY" || key === "ZB1") return key;
+  return "DXY";
+}
 
 const VALUATION_LINE_COLORS = ["#1f3a8a", "#d4af37", "#7c3aed"];
 
@@ -292,7 +300,7 @@ const state = {
   newsWatcherId: null,
   valuationPeriodLength: 10,
   valuationRescaleLength: 100,
-  valuationCompIds: ["DXY", "XAUUSD", "ZB1"],
+  valuationCompIds: ["DXY", "GC1", "ZB1"],
   valuationLineVisible: [true, true, true],
   valuationCompCache: {},
   valuationChart: null,
@@ -331,7 +339,7 @@ const CACHE_KEYS = {
   PRICE: "xau_dashboard_price_v1",
   COT: "xau_dashboard_cot_v2",
   MACRO: "xau_dashboard_macro_v1",
-  VALUATION_COMPS: "xau_dashboard_valuation_comps_v1",
+  VALUATION_COMPS: "xau_dashboard_valuation_comps_v2_futures",
 };
 
 const PREFS_KEY = "xau_dashboard_prefs_v1";
@@ -5682,7 +5690,7 @@ function setActiveTimeframe(tf) {
 }
 
 function getValuationCompAsset(compId) {
-  const key = String(compId || "").toUpperCase();
+  const key = normalizeValuationCompId(compId);
   if (VALUATION_COMP_ASSETS[key]) return VALUATION_COMP_ASSETS[key];
   return VALUATION_COMP_ASSETS.DXY;
 }
@@ -5928,7 +5936,13 @@ function updateValuationChart(dates, rescaledSeries, labels, colorIndexes = null
 
 async function ensureValuationCompSeries(compIds, { force = false } = {}) {
   const selectedId = String(state.selectedAssetId || "").toUpperCase();
-  const unique = [...new Set((compIds || []).map((id) => String(id || "").toUpperCase()).filter(Boolean))];
+  const unique = [
+    ...new Set(
+      (compIds || [])
+        .map((id) => normalizeValuationCompId(id))
+        .filter(Boolean)
+    ),
+  ];
   const results = {};
 
   const persistComps = () => {
@@ -6056,7 +6070,7 @@ async function ensureValuationCompSeries(compIds, { force = false } = {}) {
 function prefetchValuationComps() {
   if (state.valuationPrefetchStarted) return;
   state.valuationPrefetchStarted = true;
-  const ids = state.valuationCompIds || ["DXY", "XAUUSD", "ZB1"];
+  const ids = state.valuationCompIds || ["DXY", "GC1", "ZB1"];
   ensureValuationCompSeries(ids, { force: false }).catch(() => {
     state.valuationPrefetchStarted = false;
   });
@@ -6076,13 +6090,16 @@ async function loadValuationAndRender({ force = false } = {}) {
     state.valuationPeriodLength = period;
     state.valuationRescaleLength = rescale;
     state.valuationCompIds = [
-      valuationComp1El?.value || state.valuationCompIds[0] || "DXY",
-      valuationComp2El?.value || state.valuationCompIds[1] || "XAUUSD",
-      valuationComp3El?.value || state.valuationCompIds[2] || "ZB1",
+      normalizeValuationCompId(valuationComp1El?.value || state.valuationCompIds[0] || "DXY"),
+      normalizeValuationCompId(valuationComp2El?.value || state.valuationCompIds[1] || "GC1"),
+      normalizeValuationCompId(valuationComp3El?.value || state.valuationCompIds[2] || "ZB1"),
     ];
 
     const comps = await ensureValuationCompSeries(state.valuationCompIds, { force });
-    const compList = state.valuationCompIds.map((id) => comps[String(id).toUpperCase()] || { prices: [], label: id, source: "--" });
+    const compList = state.valuationCompIds.map((id) => {
+      const key = normalizeValuationCompId(id);
+      return comps[key] || { prices: [], label: getValuationCompAsset(key).label, source: "--" };
+    });
     const symPrices = filterPricesByTimeframe(state.priceData.prices);
     const aligned = alignValuationSeries(
       symPrices,
@@ -6108,7 +6125,7 @@ async function loadValuationAndRender({ force = false } = {}) {
     );
     const selectedId = String(state.selectedAssetId || "").toUpperCase();
     // Nasconde il confronto con lo stesso asset (linea piatta / rumore rescale).
-    const sameAssetMask = state.valuationCompIds.map((id) => String(id || "").toUpperCase() !== selectedId);
+    const sameAssetMask = state.valuationCompIds.map((id) => normalizeValuationCompId(id) !== selectedId);
     const userVisible = Array.isArray(state.valuationLineVisible)
       ? state.valuationLineVisible
       : [true, true, true];
@@ -6157,13 +6174,14 @@ async function loadValuationAndRender({ force = false } = {}) {
 
     const sources = compList
       .map((c, i) => {
-        const id = String(state.valuationCompIds[i] || "").toUpperCase();
+        const id = normalizeValuationCompId(state.valuationCompIds[i]);
+        const tick = (getValuationCompAsset(id).yahooSymbols || [])[0] || id;
         const skip = id === selectedId ? " [stesso asset]" : userVisible[i] === false ? " [linea off]" : "";
-        return `${c.label}:${c.source}${skip}`;
+        return `${tick}:${c.source}${skip}`;
       })
       .join(" · ");
     if (valuationSourceInfoEl) {
-      valuationSourceInfoEl.textContent = `Supreme Valuation | Period ${period} | Rescale ${rescale} | barre ${aligned.dates.length} | linee ${chartSeries.length}/3 | ${sources}`;
+      valuationSourceInfoEl.textContent = `Supreme Valuation (TV-like futures) | Period ${period} | Rescale ${rescale} | barre ${aligned.dates.length} | linee ${chartSeries.length}/3 | ${sources}`;
     }
   } finally {
     state.valuationIsLoading = false;
@@ -6546,9 +6564,9 @@ function wireEvents() {
       html: `
         <p><strong>Quale comparabile usare:</strong></p>
         <ul>
-          <li><strong>Forex</strong> → guarda il <strong>DXY</strong></li>
-          <li><strong>Metalli e agricole</strong> → guarda l'<strong>oro</strong></li>
-          <li><strong>Indici</strong> → guarda <strong>ZB1</strong></li>
+          <li><strong>Forex</strong> → guarda il <strong>DXY (DX=F)</strong></li>
+          <li><strong>Metalli e agricole</strong> → guarda l'<strong>oro (GC=F)</strong></li>
+          <li><strong>Indici</strong> → guarda i <strong>bonds (ZB=F)</strong></li>
         </ul>
         <p><strong>Period Length consigliato:</strong></p>
         <ul>
@@ -6564,7 +6582,7 @@ function wireEvents() {
           <li><strong>Tre linee sopra:</strong> se tutte e tre sono sopra → piu forza per <span class="bias-short">vendere</span>.</li>
           <li><strong>Mostra linea:</strong> puoi spegnere i singoli confronti e lasciarne anche uno solo sul grafico.</li>
         </ul>
-        <p class="info-tip"><strong>Contesto:</strong> non e un obbligo. Valuation indica forza relativa estrema: conferma sempre con COT, stagionalita e struttura del prezzo.</p>
+        <p class="info-tip"><strong>Contesto:</strong> feed TV-like via futures Yahoo (DX=F / GC=F / ZB=F). Non e identico al millimetro a TradingView, ma e l'equivalente piu vicino. Conferma sempre con COT, stagionalita e struttura del prezzo.</p>
       `,
     },
   };
@@ -6610,9 +6628,9 @@ function wireEvents() {
       state.valuationPeriodLength = Math.max(2, Number(valuationPeriodLengthEl?.value) || 10);
       state.valuationRescaleLength = Math.max(20, Number(valuationRescaleLengthEl?.value) || 100);
       state.valuationCompIds = [
-        valuationComp1El?.value || "DXY",
-        valuationComp2El?.value || "XAUUSD",
-        valuationComp3El?.value || "ZB1",
+        normalizeValuationCompId(valuationComp1El?.value || "DXY"),
+        normalizeValuationCompId(valuationComp2El?.value || "GC1"),
+        normalizeValuationCompId(valuationComp3El?.value || "ZB1"),
       ];
       loadValuationAndRender({ force: false }).catch(() => {});
       savePrefs();
@@ -6853,7 +6871,7 @@ async function init() {
       state.valuationRescaleLength = Math.max(20, Number(prefs.valuationRescaleLength));
     }
     if (Array.isArray(prefs.valuationCompIds) && prefs.valuationCompIds.length >= 3) {
-      state.valuationCompIds = prefs.valuationCompIds.map((id) => String(id || "").toUpperCase());
+      state.valuationCompIds = prefs.valuationCompIds.map((id) => normalizeValuationCompId(id));
     }
     if (Array.isArray(prefs.valuationLineVisible) && prefs.valuationLineVisible.length >= 3) {
       state.valuationLineVisible = prefs.valuationLineVisible.slice(0, 3).map((v) => v !== false);
@@ -6990,11 +7008,15 @@ async function init() {
     state.valuationRescaleLength = Math.max(20, Number(valuationRescaleLengthEl.value) || 100);
   }
   if (valuationComp1El && valuationComp2El && valuationComp3El) {
-    const ids = state.valuationCompIds || ["DXY", "XAUUSD", "ZB1"];
+    const ids = (state.valuationCompIds || ["DXY", "GC1", "ZB1"]).map((id) => normalizeValuationCompId(id));
     valuationComp1El.value = ids[0] || "DXY";
-    valuationComp2El.value = ids[1] || "XAUUSD";
+    valuationComp2El.value = ids[1] || "GC1";
     valuationComp3El.value = ids[2] || "ZB1";
-    state.valuationCompIds = [valuationComp1El.value, valuationComp2El.value, valuationComp3El.value];
+    state.valuationCompIds = [
+      normalizeValuationCompId(valuationComp1El.value),
+      normalizeValuationCompId(valuationComp2El.value),
+      normalizeValuationCompId(valuationComp3El.value),
+    ];
   }
   const lineVis = Array.isArray(state.valuationLineVisible) ? state.valuationLineVisible : [true, true, true];
   if (valuationShow1El) valuationShow1El.checked = lineVis[0] !== false;

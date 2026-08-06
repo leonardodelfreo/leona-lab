@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" href="/assets/favicon-48.png" sizes="48x48" />
     <link rel="icon" type="image/png" href="/assets/favicon-96.png" sizes="96x96" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" sizes="180x180" />
-    <link rel="stylesheet" href="/styles.css?v=20260805-news-03" />
+    <link rel="stylesheet" href="/styles.css?v=20260806-val-futures-01" />
   </head>
   <body>
     <main class="app-shell">
@@ -662,9 +662,9 @@
             <div>
               <strong>Symbol 1</strong>
               <select id="valuationComp1">
-                <option value="DXY" selected>DXY</option>
-                <option value="XAUUSD">Gold (GC1!)</option>
-                <option value="ZB1">Bonds (ZB1!)</option>
+                <option value="DXY" selected>DXY (DX=F)</option>
+                <option value="GC1">Gold (GC=F)</option>
+                <option value="ZB1">Bonds (ZB=F)</option>
               </select>
               <label class="valuation-line-toggle">
                 <input id="valuationShow1" type="checkbox" checked />
@@ -674,9 +674,9 @@
             <div>
               <strong>Symbol 2</strong>
               <select id="valuationComp2">
-                <option value="DXY">DXY</option>
-                <option value="XAUUSD" selected>Gold (GC1!)</option>
-                <option value="ZB1">Bonds (ZB1!)</option>
+                <option value="DXY">DXY (DX=F)</option>
+                <option value="GC1" selected>Gold (GC=F)</option>
+                <option value="ZB1">Bonds (ZB=F)</option>
               </select>
               <label class="valuation-line-toggle">
                 <input id="valuationShow2" type="checkbox" checked />
@@ -686,9 +686,9 @@
             <div>
               <strong>Symbol 3</strong>
               <select id="valuationComp3">
-                <option value="DXY">DXY</option>
-                <option value="XAUUSD">Gold (GC1!)</option>
-                <option value="ZB1" selected>Bonds (ZB1!)</option>
+                <option value="DXY">DXY (DX=F)</option>
+                <option value="GC1">Gold (GC=F)</option>
+                <option value="ZB1" selected>Bonds (ZB=F)</option>
               </select>
               <label class="valuation-line-toggle">
                 <input id="valuationShow3" type="checkbox" checked />
@@ -706,17 +706,17 @@
           <article class="card kpi">
             <h2>vs Symbol 1</h2>
             <p id="valuationKpi1" class="kpi-value metric">--</p>
-            <small id="valuationKpi1Label" class="muted">DXY</small>
+            <small id="valuationKpi1Label" class="muted">DXY (DX=F)</small>
           </article>
           <article class="card kpi">
             <h2>vs Symbol 2</h2>
             <p id="valuationKpi2" class="kpi-value metric">--</p>
-            <small id="valuationKpi2Label" class="muted">Gold</small>
+            <small id="valuationKpi2Label" class="muted">Gold (GC=F)</small>
           </article>
           <article class="card kpi">
             <h2>vs Symbol 3</h2>
             <p id="valuationKpi3" class="kpi-value metric">--</p>
-            <small id="valuationKpi3Label" class="muted">Bonds</small>
+            <small id="valuationKpi3Label" class="muted">Bonds (ZB=F)</small>
           </article>
           <article class="card kpi">
             <h2>Lettura</h2>
@@ -729,7 +729,7 @@
           <h2>Supreme Valuation</h2>
           <p class="muted valuation-note">
             Differenza di performance % (asset − comparabile) su Period Length, poi riscalata −100…+100 su Rescale Length.
-            Logica allineata allo script TradingView Supreme Valuation.
+            Comparabili TV-like: <strong>DX=F</strong>, <strong>GC=F</strong>, <strong>ZB=F</strong> (equivalenti Yahoo di DXY / GC1! / ZB1!).
           </p>
           <div class="valuation-chart-wrap">
             <canvas id="valuationChart"></canvas>
@@ -740,7 +740,7 @@
       <section class="card status-card">
         <small id="lastUpdated" class="muted">Ultimo aggiornamento: --</small>
         <p id="status">Caricamento dati...</p>
-        <p class="muted">Theme build: 20260805-news-03</p>
+        <p class="muted">Theme build: 20260806-val-futures-01</p>
       </section>
     </main>
 
@@ -754,6 +754,6 @@
       </div>
     </dialog>
 
-    <script src="./app.js?v=20260805-news-03"></script>
+    <script src="./app.js?v=20260806-val-futures-01"></script>
   </body>
 </html>

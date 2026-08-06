@@ -100,7 +100,7 @@ const ASSET_CATALOG = [
   { id: "XAUUSD", yahooSymbols: ["XAUUSD=X", "GC=F"], stooqSymbol: "xauusd", tvFeeds: [{ market: "cfd", ticker: "TVC:GOLD" }, { market: "forex", ticker: "OANDA:XAUUSD" }], cotMarket: "GOLD - COMMODITY EXCHANGE INC." },
   { id: "XAGUSD", yahooSymbols: ["XAGUSD=X", "SI=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:SILVER" }, { market: "forex", ticker: "OANDA:XAGUSD" }], cotMarket: "SILVER - COMMODITY EXCHANGE INC." },
   { id: "XPTUSD", yahooSymbols: ["PL=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:PLATINUM" }], cotMarket: "PLATINUM - NEW YORK MERCANTILE EXCHANGE" },
-  { id: "DXY", yahooSymbols: ["DX-Y.NYB", "DX=F"], tvFeeds: [{ market: "cfd", ticker: "TVC:DXY" }, { market: "futures", ticker: "ICEUS:DX1!" }], cotMarket: "USD INDEX - ICE FUTURES U.S.", cotMarkets: ["USD INDEX - ICE FUTURES U.S.", "U.S. DOLLAR INDEX - ICE FUTURES U.S."] },
+  { id: "DXY", yahooSymbols: ["DX=F", "DX-Y.NYB"], tvFeeds: [{ market: "futures", ticker: "ICEUS:DX1!" }, { market: "cfd", ticker: "TVC:DXY" }], cotMarket: "USD INDEX - ICE FUTURES U.S.", cotMarkets: ["USD INDEX - ICE FUTURES U.S.", "U.S. DOLLAR INDEX - ICE FUTURES U.S."] },
   { id: "EURUSD", yahooSymbols: ["EURUSD=X", "6E=F"], tvFeeds: [{ market: "forex", ticker: "FX:EURUSD" }, { market: "forex", ticker: "OANDA:EURUSD" }], cotMarket: "EURO FX - CHICAGO MERCANTILE EXCHANGE" },
   { id: "GBPUSD", yahooSymbols: ["GBPUSD=X", "6B=F"], tvFeeds: [{ market: "forex", ticker: "FX:GBPUSD" }, { market: "forex", ticker: "OANDA:GBPUSD" }], cotMarket: "BRITISH POUND - CHICAGO MERCANTILE EXCHANGE", cotMarkets: ["BRITISH POUND - CHICAGO MERCANTILE EXCHANGE", "BRITISH POUND STERLING - CHICAGO MERCANTILE EXCHANGE"] },
   { id: "USDJPY", yahooSymbols: ["JPY=X", "6J=F"], tvFeeds: [{ market: "forex", ticker: "FX:USDJPY" }, { market: "forex", ticker: "OANDA:USDJPY" }], cotMarket: "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE" },
@@ -134,8 +134,9 @@ const ASSET_CATALOG = [
   { id: "COTTON", yahooSymbols: ["CT=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CT1!" }], cotMarket: "COTTON NO. 2 - ICE FUTURES U.S." },
   { id: "COCOA", yahooSymbols: ["CC=F"], tvFeeds: [{ market: "futures", ticker: "ICEUS:CC1!" }], cotMarket: "COCOA - ICE FUTURES U.S." },
   { id: "OATS", yahooSymbols: ["ZO=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZO1!" }], cotMarket: "OATS - CHICAGO BOARD OF TRADE" },
-  // Valuation comparable (ZB1! / US Treasury bond futures). Not shown in main asset picker.
-  { id: "ZB1", yahooSymbols: ["ZB=F", "ZN=F", "TLT"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZB1!" }], cotMarket: null },
+  // Valuation comparables ≈ TradingView DX1! / GC1! / ZB1! via Yahoo continuous futures.
+  { id: "ZB1", yahooSymbols: ["ZB=F"], tvFeeds: [{ market: "futures", ticker: "CBOT:ZB1!" }], cotMarket: null },
+  { id: "GC1", yahooSymbols: ["GC=F"], tvFeeds: [{ market: "futures", ticker: "COMEX:GC1!" }], cotMarket: null },
 ];
 
 const macroState = {
@@ -963,7 +964,9 @@ async function syncUserSubscriptionFromStripe(user) {
 }
 
 function getPriceCacheFile(assetId) {
-  return `${PRICE_CACHE_PREFIX}${assetId}.json`;
+  const asset = getAssetById(assetId);
+  const primary = String(asset?.yahooSymbols?.[0] || "na").replace(/[^a-zA-Z0-9]+/g, "");
+  return `${PRICE_CACHE_PREFIX}${assetId}-${primary}.json`;
 }
 
 function getCotCacheFile(assetId) {
@@ -3392,7 +3395,7 @@ server.listen(PORT, HOST, () => {
   }
   // Warm Valuation comps so first tab open is fast.
   setTimeout(() => {
-    Promise.all(["XAUUSD", "DXY", "ZB1"].map((id) => getPriceSeriesForAsset(id).catch(() => null))).catch(() => {});
+    Promise.all(["XAUUSD", "DXY", "GC1", "ZB1"].map((id) => getPriceSeriesForAsset(id).catch(() => null))).catch(() => {});
   }, 2500);
   // Warm news cache in background as well.
   setTimeout(() => {
