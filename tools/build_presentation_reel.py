@@ -303,12 +303,16 @@ def write_scene_video(name: str, render_fn, duration: float) -> Path:
 
 
 def extract_dash_clip(name: str, start: float, dur: float) -> Path:
-    """Zoom landscape dashboard into readable 9:16."""
+    """Fit full landscape dashboard centered in 9:16 (letterbox, no crop)."""
     out = OUT / f"_clip_{name}.mp4"
+    # Scale to fit inside 1080x1920 keeping full UI visible, center with black bars
     vf = (
-        f"scale=-2:1920,crop=1080:1920:'(iw-1080)/2+60*sin(2*PI*t/8)':0,"
+        "scale=1080:1920:force_original_aspect_ratio=decrease,"
+        "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,"
         "drawtext=fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:"
-        "text='Leona.Lab':fontcolor=0xD4AF37:fontsize=34:x=(w-text_w)/2:y=36"
+        "text='Leona.Lab':fontcolor=0xD4AF37:fontsize=34:x=(w-text_w)/2:y=48,"
+        "drawtext=fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:"
+        "text='leona-lab.com':fontcolor=0xD4AF37:fontsize=22:x=(w-text_w)/2:y=h-64"
     )
     subprocess.check_call(
         [
@@ -336,7 +340,7 @@ def extract_dash_clip(name: str, start: float, dur: float) -> Path:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    print(f"dash {name} {dur:.1f}s from {start:.1f}s")
+    print(f"dash {name} {dur:.1f}s from {start:.1f}s (full screen centered)")
     return out
 
 
