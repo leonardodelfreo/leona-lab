@@ -167,29 +167,31 @@ def crop_dash(path: Path, box_frac) -> Image.Image:
 def product_frame(base: Image.Image, label: str, t: float, dur: float) -> Image.Image:
     """Ken Burns on cropped product + label chrome."""
     p = t / max(dur, 0.001)
-    # gentle zoom 1.0 -> 1.06
-    scale = 1.0 + 0.06 * ease_out(p)
+    scale = 1.0 + 0.05 * ease_out(p)
     nw, nh = int(W * scale), int(H * scale)
     zoomed = base.resize((nw, nh), Image.Resampling.LANCZOS)
     x = (nw - W) // 2
-    y = (nh - H) // 2 + int(lerp(8, -12, p))
+    y = (nh - H) // 2 + int(lerp(6, -10, p))
     frame = zoomed.crop((x, y, x + W, y + H))
 
-    # dark vignette top/bottom for label readability
+    # slight brighten for dark UI shots
+    from PIL import ImageEnhance
+    frame = ImageEnhance.Brightness(frame).enhance(1.08)
+    frame = ImageEnhance.Contrast(frame).enhance(1.06)
+
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
-    for i in range(150):
-        a = int(180 * (1 - i / 150))
+    for i in range(140):
+        a = int(170 * (1 - i / 140))
         od.line([(0, i), (W, i)], fill=(0, 0, 0, a))
-    for i in range(120):
-        a = int(160 * (1 - i / 120))
+    for i in range(110):
+        a = int(150 * (1 - i / 110))
         od.line([(0, H - 1 - i), (W, H - 1 - i)], fill=(0, 0, 0, a))
     frame = Image.alpha_composite(frame.convert("RGBA"), overlay).convert("RGB")
 
     draw = ImageDraw.Draw(frame)
     paste_logo(frame, y=36, size=64)
-    # fade-in label
-    la = ease_out(clamp(t / 0.45))
+    la = ease_out(clamp(t / 0.4))
     lf = font(26, True)
     centered_text(draw, label, 118, lf, tuple(int(c * la) for c in GOLD))
     gold_rule(draw, 156, int(280 * la), la)
@@ -199,10 +201,10 @@ def product_frame(base: Image.Image, label: str, t: float, dur: float) -> Image.
 
 # Crops tuned for Leona desk screenshots (sidebar ~left 18%)
 CROPS = {
-    "cot": (0.18, 0.10, 0.98, 0.78),       # KPI + chart
-    "sea": (0.18, 0.22, 0.98, 0.92),       # seasonality chart
-    "timing": (0.40, 0.28, 0.99, 0.95),    # timing table focus
-    "news": (0.18, 0.18, 0.98, 0.92),      # news list
+    "cot": (0.18, 0.08, 0.99, 0.72),       # KPI strip + focus chart
+    "sea": (0.18, 0.18, 0.99, 0.88),       # supreme seasonality chart
+    "timing": (0.42, 0.22, 0.995, 0.95),   # timing table only
+    "news": (0.20, 0.16, 0.99, 0.88),      # news list area
 }
 
 
@@ -433,6 +435,21 @@ def crossfade(a: Image.Image, b: Image.Image, p: float) -> Image.Image:
     return Image.blend(a.convert("RGB"), b.convert("RGB"), p)
 
 
+def dip_black(a: Image.Image, b: Image.Image, p: float) -> Image.Image:
+    """Fade out to black then in — avoids UI text ghosting between dense shots."""
+    p = ease_in_out(p)
+    black = blank()
+    if p < 0.5:
+        return Image.blend(a.convert("RGB"), black, p * 2)
+    return Image.blend(black, b.convert("RGB"), (p - 0.5) * 2)
+
+
+def fade_frames(a_img, b_img, dur=0.4, mode="cross"):
+    n = max(8, int(dur * FPS))
+    fn = dip_black if mode == "dip" else crossfade
+    return [fn(a_img, b_img, i / (n - 1)) for i in range(n)]
+
+
 def render_clip(name: str, frames: list[Image.Image]) -> Path:
     d = OUT / "_frames" / name
     if d.exists():
@@ -454,11 +471,6 @@ def render_clip(name: str, frames: list[Image.Image]) -> Path:
 def seq(fn, dur):
     n = int(dur * FPS)
     return [fn(i / FPS, dur) for i in range(n)]
-
-
-def fade_frames(a_img, b_img, dur=0.4):
-    n = max(8, int(dur * FPS))
-    return [crossfade(a_img, b_img, i / (n - 1)) for i in range(n)]
 
 
 def concat(clips, dest):
@@ -506,19 +518,19 @@ def main():
     clips.append(render_clip("03", seq(scene_tagline, 2.6)))
     clips.append(render_clip("03f", fade_frames(e_tag, e_feat, 0.35)))
     clips.append(render_clip("04", seq(scene_features, 3.8)))
-    clips.append(render_clip("04f", fade_frames(e_feat, e_cot, 0.4)))
+    clips.append(render_clip("04f", fade_frames(e_feat, e_cot, 0.45, "dip")))
     clips.append(render_clip("05", seq(lambda t, d: product_frame(cot_base, "COT INTELLIGENCE", t, d), 4.3)))
-    clips.append(render_clip("05f", fade_frames(e_cot, e_sea, 0.4)))
+    clips.append(render_clip("05f", fade_frames(e_cot, e_sea, 0.5, "dip")))
     clips.append(render_clip("06", seq(lambda t, d: product_frame(sea_base, "STAGIONALITÀ", t, d), 4.1)))
-    clips.append(render_clip("06f", fade_frames(e_sea, e_timing, 0.4)))
+    clips.append(render_clip("06f", fade_frames(e_sea, e_timing, 0.5, "dip")))
     clips.append(render_clip("07", seq(lambda t, d: product_frame(timing_base, "TIMING GIORNI DEL MESE", t, d), 4.5)))
-    clips.append(render_clip("07f", fade_frames(e_timing, e_excl, 0.35)))
+    clips.append(render_clip("07f", fade_frames(e_timing, e_excl, 0.4, "dip")))
     clips.append(render_clip("08", seq(scene_exclusive, 3.1)))
     clips.append(render_clip("08f", fade_frames(e_excl, e_bias, 0.35)))
     clips.append(render_clip("09", seq(scene_bias, 3.5)))
-    clips.append(render_clip("09f", fade_frames(e_bias, e_news, 0.4)))
+    clips.append(render_clip("09f", fade_frames(e_bias, e_news, 0.5, "dip")))
     clips.append(render_clip("10", seq(lambda t, d: product_frame(news_base, "BREAKING NEWS", t, d), 4.3)))
-    clips.append(render_clip("10f", fade_frames(e_news, e_newsc, 0.35)))
+    clips.append(render_clip("10f", fade_frames(e_news, e_newsc, 0.4, "dip")))
     clips.append(render_clip("11", seq(scene_news_card, 3.1)))
     clips.append(render_clip("11f", fade_frames(e_newsc, e_cta, 0.4)))
     clips.append(render_clip("12", seq(scene_cta, 3.5)))
