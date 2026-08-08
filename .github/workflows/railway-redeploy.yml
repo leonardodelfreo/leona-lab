@@ -1,0 +1,41 @@
+name: Railway redeploy
+
+# Triggers Railway when RAILWAY_TOKEN (+ optional service/environment) are set
+# in GitHub repo Secrets. If secrets are missing, exits 0 so the workflow
+# still completes (GitHub→Railway autodeploy / manual redeploy remain the fallback).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Railway GraphQL redeploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+          RAILWAY_ENVIRONMENT_ID: ${{ secrets.RAILWAY_ENVIRONMENT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAILWAY_TOKEN:-}" ] || [ -z "${RAILWAY_SERVICE_ID:-}" ] || [ -z "${RAILWAY_ENVIRONMENT_ID:-}" ]; then
+            echo "Railway secrets not configured — skip API redeploy."
+            echo "Set repo secrets: RAILWAY_TOKEN, RAILWAY_SERVICE_ID, RAILWAY_ENVIRONMENT_ID"
+            echo "Or use Railway dashboard → Deploy Latest Commit."
+            exit 0
+          fi
+          body=$(jq -n \
+            --arg sid "$RAILWAY_SERVICE_ID" \
+            --arg eid "$RAILWAY_ENVIRONMENT_ID" \
+            '{
+              query: "mutation($serviceId: String!, $environmentId: String!) { serviceInstanceRedeploy(serviceId: $serviceId, environmentId: $environmentId) }",
+              variables: { serviceId: $sid, environmentId: $eid }
+            }')
+          resp=$(curl -sS -X POST https://backboard.railway.app/graphql/v2 \
+            -H "Authorization: Bearer ${RAILWAY_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$body")
+          echo "$resp" | jq .
+          echo "$resp" | jq -e '.data.serviceInstanceRedeploy == true' >/dev/null

@@ -44,6 +44,11 @@ Variabili:
 1. New Project → Deploy from folder/repo
 2. Start command gia in `railway.json`
 3. Abilita volume su `./data` se disponibile
+4. Collega il servizio al branch `main` con **autodeploy** attivo
+
+Se dopo un merge su `main` il sito non si aggiorna: in Railway apri il servizio → Command Palette (`Cmd/Ctrl+K`) → **Deploy Latest Commit**.
+
+Opzionale (CI): imposta i secret GitHub `RAILWAY_TOKEN`, `RAILWAY_SERVICE_ID`, `RAILWAY_ENVIRONMENT_ID` per il workflow `.github/workflows/railway-redeploy.yml`.
 
 > Le sessioni sono in memoria: usa **una sola istanza**. Gli utenti restano in `data/users.json`.
 
