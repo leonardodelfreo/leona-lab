@@ -1,443 +1,391 @@
 /**
- * Leona.Lab — assistente landing (FAQ conversazionale).
- * Matching per intent + parole chiave pesate (niente API esterne).
+ * Leona.Lab — assistente landing.
+ * Banca Q&A: tante domande tipiche + risposte variabili, matching sulla domanda giusta.
  */
 (function () {
   const SUPPORT_EMAIL = "supportleonalab@gmail.com";
 
   const QUICK = [
-    { label: "Cos'è?", q: "cos'è leona.lab" },
-    { label: "Prezzi", q: "quanto costa" },
-    { label: "Cosa include", q: "cosa include" },
-    { label: "Come iniziare", q: "come inizio" },
-    { label: "Assistenza", q: "contatto assistenza" },
+    { label: "PayPal?", q: "si puo pagare con paypal?" },
+    { label: "Lifetime", q: "quanto dura il lifetime?" },
+    { label: "Perché abbonarsi?", q: "perche dovrei fare labbonamento?" },
+    { label: "Come leggere COT", q: "come si legge il cot?" },
+    { label: "Come iscriversi", q: "come mi iscrivo?" },
   ];
 
   /**
-   * Ogni intent ha:
-   * - any: frase/parola che alza lo score se presente nella domanda
-   * - all: se presenti insieme, boost forte (es. "quanto"+"costa")
-   * - exclude: se presenti, abbassa lo score (evita risposte sbagliate)
-   * - priority: tie-break (più alto = preferito a parità)
+   * Ogni voce: domande tipiche + keywords forti + 2–4 risposte (varianti).
+   * Il motore sceglie la VOCE giusta, poi una risposta a rotazione.
    */
-  const INTENTS = [
+  const QA = [
+    // ——— PAGAMENTI / PAYPAL ———
     {
-      id: "saluto",
-      priority: 1,
-      any: ["ciao", "salve", "buongiorno", "buonasera", "hey", "hola", "hello", "hi"],
-      answer:
-        "Ciao! Dimmi pure cosa ti serve su Leona.Lab.\n\nEsempi: «quanto costa?», «cosa include?», «come funziona COT?», «come inizio?»",
+      id: "paypal",
+      q: [
+        "si puo pagare con paypal",
+        "accettate paypal",
+        "posso usare paypal",
+        "pagamento paypal",
+        "avete paypal",
+        "checkout paypal",
+        "pay pal",
+      ],
+      keys: ["paypal", "pay pal"],
+      answers: [
+        "Al momento il checkout è con Stripe (carte e metodi supportati da Stripe). PayPal non è attivo.\n\nSe ti serve un metodo specifico, scrivi a " +
+          SUPPORT_EMAIL +
+          ". Piani: /prezzi",
+        "No, oggi non c’è PayPal: si paga via Stripe sul checkout di /prezzi.\n\nDopo il pagamento ti registri con la stessa email. Dubbi? " +
+          SUPPORT_EMAIL,
+        "PayPal non è disponibile adesso. Il flusso è: /prezzi → paga con Stripe → registrati → /login.\n\nPer richieste particolari: " +
+          SUPPORT_EMAIL,
+      ],
     },
+    {
+      id: "pagamenti_metodi",
+      q: [
+        "come si paga",
+        "quali metodi di pagamento",
+        "posso pagare con la carta",
+        "accettate carta di credito",
+        "stripe",
+        "pagamento sicuro",
+      ],
+      keys: ["stripe", "carta", "credito", "debito", "metodi di pagamento", "come si paga"],
+      answers: [
+        "Il pagamento è gestito da Stripe sul checkout di /prezzi (sicuro, fuori dal sito).\n\nPiani: Mensile 24,90 € · Annuale 219,90 € · Lifetime 2.999,90 €.",
+        "Sì: paghi con i metodi accettati da Stripe. Non gestiamo noi i dati della carta.\n\nVai su /prezzi, scegli il piano e completa il checkout.",
+      ],
+    },
+
+    // ——— LIFETIME ———
+    {
+      id: "lifetime_durata",
+      q: [
+        "quanto dura l abbonamento lifetime",
+        "quanto dura il lifetime",
+        "lifetime quanto dura",
+        "il lifetime scade",
+        "lifetime a vita",
+        "lifetime per sempre",
+        "cosa significa lifetime",
+        "lifetime una tantum",
+      ],
+      keys: ["lifetime", "a vita", "una tantum", "per sempre"],
+      answers: [
+        "Il Lifetime è un pagamento unico (2.999,90 €): accesso a vita al desk, senza rinnovo mensile/annuale.\n\nNon è un abbonamento che scade a fine mese — resti dentro. Checkout: /prezzi",
+        "«Lifetime» = paghi una volta e l’accesso resta attivo (niente canone ricorrente).\n\nPrezzo: 2.999,90 € una tantum. Stesso desk dei piani mensile/annuale. /prezzi",
+        "Durata Lifetime: illimitata (accesso a vita al prodotto Leona.Lab), pagamento una tantum.\n\nSe hai già pagato e non entri, scrivi a " +
+          SUPPORT_EMAIL +
+          " con l’email del checkout.",
+      ],
+    },
+    {
+      id: "lifetime_vs_altro",
+      q: [
+        "conviene il lifetime",
+        "differenza lifetime e annuale",
+        "meglio lifetime o mensile",
+        "lifetime vale la pena",
+      ],
+      keys: ["conviene lifetime", "meglio lifetime", "differenza lifetime"],
+      answers: [
+        "Mensile/Annuale = canone ricorrente (disdici quando vuoi). Lifetime = una tantum, accesso a vita.\n\nLo stesso desk in tutti i piani. Se pensi di usarlo a lungo, Lifetime evita i rinnovi. /prezzi",
+        "Lifetime ha senso se vuoi impegno definitivo senza rinnovi. Se preferisci flessibilità: Mensile 24,90 € o Annuale 219,90 €.\n\nFunzioni identiche. /prezzi",
+      ],
+    },
+
+    // ——— PERCHÉ ABBONARSI ———
+    {
+      id: "perche_abbonarsi",
+      q: [
+        "perche dovrei fare l abbonamento",
+        "perche abbonarsi",
+        "perche dovrei iscrivermi",
+        "perche pagare",
+        "cosa ci guadagno",
+        "perche scegliere leona",
+        "vantaggi abbonamento",
+        "perche usare leona lab",
+      ],
+      keys: ["perche", "perché", "vantaggi", "conviene abbon", "perche pagare", "perche iscriv"],
+      answers: [
+        "Perché unisce in un solo desk ciò che di solito è sparso: COT, stagionalità (+ timing giorni del mese), Valuation, macro, news e Signal Center.\n\nEsci con un bias LONG / SHORT / WAIT più chiaro — poi decidi tu. Non è consulenza. /prezzi",
+        "L’abbonamento apre il desk completo: positioning COT, quando il mese ha storicamente premiato long/short, valuation vs DXY/oro/bonds, calendario macro e breaking news.\n\nMeno tab, più contesto. Piani: /prezzi",
+        "Se già guardi COT, stagione e macro da fonti diverse, Leona.Lab le mette nello stesso flusso operativo (incluso timing giorni del mese, esclusiva).\n\nProvalo dal piano che preferisci: /prezzi",
+      ],
+    },
+
+    // ——— ISCRIZIONE ———
+    {
+      id: "iscrizione",
+      q: [
+        "come iscriversi",
+        "come mi iscrivo",
+        "come registrarsi",
+        "come mi registro",
+        "come creare account",
+        "come iniziare",
+        "come inizio",
+        "come fare labbonamento",
+        "dove mi iscrivo",
+        "voglio iscrivermi",
+      ],
+      keys: ["iscriv", "registr", "creare account", "come inizio", "come iniziare", "sign up"],
+      answers: [
+        "Iscrizione in 4 passi:\n1) Vai su /prezzi e scegli Mensile / Annuale / Lifetime\n2) Paga con Stripe\n3) Registrati su /registrati con la stessa email del checkout\n4) Entra da /login e apri il desk\n\nHai già pagato? Parti da /registrati.",
+        "Non si crea l’account prima del pagamento: prima /prezzi → checkout, poi registrazione con l’email usata per pagare, poi /login.\n\nServe una mano? " +
+          SUPPORT_EMAIL,
+        "Per entrare nel desk: scegli un piano su /prezzi, completa il pagamento, crea l’account e accedi.\n\nAccount già attivo? → /login",
+      ],
+    },
+    {
+      id: "dopo_pagamento",
+      q: [
+        "ho pagato e ora",
+        "pagato ma non posso entrare",
+        "dopo il pagamento cosa fare",
+        "non mi fa registrare",
+        "ho fatto il checkout",
+      ],
+      keys: ["ho pagato", "dopo il pagamento", "checkout fatto", "pagato ma"],
+      answers: [
+        "Dopo il pagamento: apri /registrati (idealmente dal link post-checkout), usa la stessa email dello Stripe checkout, crea password e accedi.\n\nSe blocca, scrivi a " +
+          SUPPORT_EMAIL +
+          " con email + piano + orario pagamento.",
+        "Se hai già pagato ma non vedi l’accesso: registra l’account con l’email del pagamento su /registrati, poi /login.\n\nProblemi? " + SUPPORT_EMAIL,
+      ],
+    },
+
+    // ——— COME LEGGERE COT ———
+    {
+      id: "leggere_cot",
+      q: [
+        "come si legge il cot",
+        "come leggere cot",
+        "come si legge cot",
+        "come funziona cot",
+        "spiegami il cot",
+        "cosa guarda il cot",
+        "come usare cot",
+        "cot come si interpreta",
+      ],
+      keys: ["cot", "commitment of traders", "positioning", "non-commercial", "retail cot"],
+      answers: [
+        "Come leggere COT (regola base in Leona.Lab):\n• Fai il contrario dei Retail e segui i Non-Commercial.\n• Setup long: Retail estremi short + Non-Commercial che aumentano posizioni.\n• Setup short: Retail estremi long + Non-Commercial che tolgono posizioni.\n• Commercial (materie): estremi alti ≈ zona long; estremi bassi ≈ zona short.\n\nSempre incrocia con prezzo, Valuation, stagione e macro.",
+        "Il tab COT mostra chi è crowded (Commercial / Non-Commercial / Retail).\n\nOperativamente: Retail agli estremi spesso “sbagliati” di sentiment; i Non-Commercial danno la direzione del flusso. Non è un ordine automatico — conferma con Valuation e Timing.",
+        "COT = positioning settimanale. In desk: grafico Focus + KPI (regime, index, OI…).\n\nLettura pratica: estremi Retail vs flusso Non-Commercial. Poi checklist in Signal Center. Guida anche dal pallino «i» sulla tab COT.",
+      ],
+    },
+
+    // ——— STAGIONALITÀ / TIMING ———
+    {
+      id: "leggere_stagione",
+      q: [
+        "come si legge la stagionalita",
+        "come funziona la stagionalita",
+        "come usare stagionalita",
+        "timing giorni del mese come si legge",
+        "cosa e il timing giorni",
+        "giorno long e short",
+        "come leggere i giorni del mese",
+      ],
+      keys: ["stagional", "seasonality", "timing", "giorni del mese", "giorno long", "giorno short"],
+      answers: [
+        "Stagionalità: vedi come l’asset si comporta mediamente nei mesi.\n• Supreme Seasonality = curva cumulata di forza/debolezza.\n• Timing giorni del mese (esclusiva): per ogni mese, giorno long e short storicamente più favorevoli + bias mese.\n\nServe per il «quando». Conferma con COT, Valuation e segnali.",
+        "Timing giorni: media e hit-rate su rendimenti giornalieri reali (niente numeri inventati).\n\nUso: allinea il giorno al bias del mese, poi crocia con COT e Valuation. Tab Stagionalità nel desk.",
+        "Finestra anni: 10Y è un buon default. Mese ingresso / orizzonte allineali al trade che stai valutando.\n\nStagione ≠ segnale da sola.",
+      ],
+    },
+
+    // ——— VALUATION ———
+    {
+      id: "leggere_valuation",
+      q: [
+        "come si legge la valuation",
+        "come funziona valuation",
+        "come usare valuation",
+        "spiegami valuation",
+        "cosa significa overvalued",
+        "soglie valuation",
+      ],
+      keys: ["valuation", "valutazione", "overvalued", "undervalued", "over/under"],
+      answers: [
+        "Valuation (scala −100…+100 vs comparabili):\n• Forex → DXY · Metalli/agricole → oro (GC=F) · Indici → bonds (ZB=F)\n• Sopra +75: stirato al rialzo → bias short (da contestualizzare)\n• Sotto −75: stirato al ribasso → bias long\n• Tre linee sotto → più forza long; tre sopra → più forza short\n\nPeriod tipico: Forex/Metalli 10, Indici 30. Conferma con COT e stagione.",
+        "Supreme Valuation confronta l’asset vs DXY / GC=F / ZB=F. Puoi spegnere le linee con «Mostra linea».\n\nNon è TradingView al millimetro, è l’equivalente più vicino via futures Yahoo. Tab Valuation nel desk.",
+      ],
+    },
+
+    // ——— SEGNALI ———
+    {
+      id: "leggere_segnali",
+      q: [
+        "come si leggono i segnali",
+        "come funziona signal center",
+        "cosa significa long short wait",
+        "come usare i segnali",
+        "bias cosa significa",
+      ],
+      keys: ["segnale", "segnali", "signal", "playbook", "long short wait"],
+      answers: [
+        "Signal Center = riassunto del desk (COT + stagione + momentum) in un bias unico.\n• Bias 0–100: ~sopra 63 Bullish, ~sotto 37 Bearish, in mezzo WAIT\n• Playbook: LONG / SHORT / WAIT-RANGE\n• Qualità dati bassa → riduci size\n\nRegola: prima contesto (COT, Valuation, stagione), poi il segnale come checklist finale — non unico filtro.",
+        "I segnali non sono ordini automatici. Ti dicono direzione e playbook dopo aver pesato i pezzi del desk.\n\nUsali per confermare, non per entrare alla cieca.",
+      ],
+    },
+
+    // ——— MACRO / NEWS ———
+    {
+      id: "leggere_macro",
+      q: [
+        "come si legge il macro",
+        "come usare il calendario",
+        "calendario macro come funziona",
+      ],
+      keys: ["macro", "calendario", "fomc", "nfp", "cpi"],
+      answers: [
+        "Macro Calendar: eventi che possono muovere il mercato.\n• Bordo rosso = importanza alta · oro = media · verde = bassa\n• Badge feed: LIVE / FAILOVER / CACHE\n\nSu news ad alta importanza: riduci size o evita entry forzate.",
+      ],
+    },
+    {
+      id: "leggere_news",
+      q: [
+        "come funzionano le news",
+        "breaking news a cosa serve",
+        "come usare le news",
+      ],
+      keys: ["breaking", "news", "notizie"],
+      answers: [
+        "Breaking News = contesto geopolitico/globale (RSS aggregati) dentro il desk.\n\nÈ informazione, non segnale. Incrocia con Macro, COT e Valuation prima di cambiare size/direzione.",
+      ],
+    },
+
+    // ——— COME SI LEGGONO LE VARIE COSE (generico moduli) ———
+    {
+      id: "leggere_tutto",
+      q: [
+        "come si leggono le varie cose",
+        "come si leggono cot ecc",
+        "come leggere tutto",
+        "come si usano i moduli",
+        "spiegami come leggere il desk",
+        "come si interpretano i dati",
+      ],
+      keys: ["come si leggono", "varie cose", "moduli", "interpretare", "come leggere il desk"],
+      answers: [
+        "Ordine di lettura consigliato:\n1) Asset + timeframe\n2) COT (flusso / estremi)\n3) Stagionalità + timing giorno del mese\n4) Valuation (stiramento vs DXY/oro/bonds)\n5) Macro/News per il contesto del giorno\n6) Signal Center come checklist LONG/SHORT/WAIT\n\nChiedimi pure «come si legge il COT?» o «come si legge la Valuation?» per il dettaglio.",
+        "In sintesi: COT = chi è posizionato · Stagione/Timing = quando · Valuation = quanto è stirato · Macro/News = cosa può scuotere · Segnali = sintesi.\n\nDimmi quale pezzo vuoi approfondire (COT, stagione, valuation, segnali…).",
+      ],
+    },
+
+    // ——— PREZZI ———
     {
       id: "prezzi",
-      priority: 20,
-      any: [
-        "prezzo",
+      q: [
+        "quanto costa",
+        "quanto costano i piani",
         "prezzi",
-        "costo",
-        "costa",
-        "costano",
-        "costi",
-        "abbonamento",
-        "abbonamenti",
-        "piano",
-        "piani",
-        "mensile",
-        "annuale",
-        "lifetime",
-        "tariffa",
-        "tariffe",
-        "pagamento",
-        "pagare",
-        "checkout",
-        "stripe",
-        "euro",
-        "€",
-        "sconto",
-        "offerta",
+        "listino",
+        "prezzo mensile",
+        "prezzo annuale",
+        "prezzo lifetime",
       ],
-      all: [
-        ["quanto", "costa"],
-        ["quanto", "costano"],
-        ["che", "prezzo"],
-        ["quale", "piano"],
+      keys: ["prezz", "cost", "euro", "24,90", "219", "2999", "listino"],
+      answers: [
+        "Piani (stesso desk completo):\n• Mensile — 24,90 €/mese\n• Annuale — 219,90 €/anno (~18,33 €/mese)\n• Lifetime — 2.999,90 € una tantum\n\nCheckout: /prezzi",
+        "Mensile 24,90 € (flessibile), Annuale 219,90 € (risparmio), Lifetime 2.999,90 € (una volta).\n\nDettagli: /prezzi",
       ],
-      answer:
-        "Piani attuali (stesso accesso completo al desk):\n\n• Mensile — 24,90 €/mese (disdici quando vuoi)\n• Annuale — 219,90 €/anno (~18,33 €/mese equivalenti)\n• Lifetime — 2.999,90 € una tantum\n\nIl pagamento apre la registrazione. Dettagli e checkout: /prezzi",
-    },
-    {
-      id: "cot",
-      priority: 22,
-      any: [
-        "cot",
-        "commitment of traders",
-        "positioning",
-        "commerciali",
-        "non-commercial",
-        "crowded",
-        "come funziona cot",
-        "cos'e cot",
-        "cos'è cot",
-      ],
-      all: [
-        ["come", "cot"],
-        ["funziona", "cot"],
-        ["spiega", "cot"],
-      ],
-      answer:
-        "COT Intelligence mostra il positioning (Commercial / Non-Commercial / Retail): chi è crowded, chi fa hedging e dove il prezzo diverge dal flusso.\n\nLa trovi nel tab COT del desk, dopo login. Si usa insieme a stagionalità, valuation e segnali — non da sola.",
-    },
-    {
-      id: "stagionalita",
-      priority: 22,
-      any: [
-        "stagionalita",
-        "stagionalità",
-        "stagione",
-        "seasonality",
-        "timing",
-        "giorno del mese",
-        "giorni del mese",
-        "long day",
-        "short day",
-      ],
-      all: [
-        ["come", "stagion"],
-        ["funziona", "stagion"],
-        ["come", "timing"],
-      ],
-      answer:
-        "Nella Stagionalità trovi la curva Supreme Seasonality e l’esclusiva Timing giorni del mese: per ogni mese, il giorno storicamente più favorevole al long e allo short + bias del mese.\n\nDati su storico reale dell’asset. Da usare con COT, Valuation e Signal Center.",
-    },
-    {
-      id: "valuation",
-      priority: 22,
-      any: [
-        "valuation",
-        "valutazione",
-        "overvalued",
-        "undervalued",
-        "over/under",
-        "supreme valuation",
-      ],
-      all: [
-        ["come", "valuation"],
-        ["funziona", "valuation"],
-        ["come", "valutazione"],
-      ],
-      answer:
-        "Supreme Valuation confronta l’asset vs DXY, oro (GC=F) e bonds su scala −100…+100 (stile TradingView).\n\nSoglie indicative ±75 (over / under). Tab Valuation nel desk. Nota: su Gold Spot la serie chart usa GC=F.",
-    },
-    {
-      id: "macro",
-      priority: 21,
-      any: ["macro", "calendario", "calendar", "fomc", "nfp", "cpi"],
-      all: [
-        ["come", "macro"],
-        ["calendario", "macro"],
-      ],
-      answer:
-        "Il Macro Calendar elenca gli eventi che muovono i mercati, con stato feed chiaro (LIVE / CACHE).\n\nLo usi per il contesto prima di decidere: non è un segnale operativo da solo.",
-    },
-    {
-      id: "news",
-      priority: 21,
-      any: ["news", "notizie", "breaking", "geopolitic"],
-      answer:
-        "Breaking News porta contesto geopolitico e eventi globali in tempo reale nel desk.\n\nÈ informazione di contesto, non un segnale di trading automatico.",
-    },
-    {
-      id: "segnali",
-      priority: 21,
-      any: ["segnale", "segnali", "signal center", "playbook"],
-      all: [
-        ["bias", "long"],
-        ["bias", "short"],
-        ["long", "short", "wait"],
-      ],
-      exclude: ["giorno", "giorni", "timing", "stagion"],
-      answer:
-        "Signal Center propone un bias LONG / SHORT / WAIT con confidenza e playbook leggibile.\n\nÈ una checklist finale sul contesto (COT, stagione, valuation…), non un ordine automatico da seguire alla cieca.",
-    },
-    {
-      id: "include",
-      priority: 14,
-      any: [
-        "include",
-        "inclusi",
-        "funzionalita",
-        "funzionalità",
-        "funzioni",
-        "feature",
-        "moduli",
-        "tool",
-        "strumenti",
-        "cosa offre",
-        "cosa c'e",
-        "cosa c'è",
-        "che include",
-        "contenuto",
-      ],
-      all: [
-        ["cosa", "include"],
-        ["cosa", "c'e"],
-        ["cosa", "c'è"],
-      ],
-      answer:
-        "Nel desk trovi:\n\n• Timing giorni del mese (esclusiva)\n• Signal Center (LONG / SHORT / WAIT)\n• COT Intelligence\n• Supreme Valuation (−100…+100)\n• Macro Calendar\n• Breaking News\n\nMercati: Forex, Metalli, Indici e Agricoli. Stesso accesso su tutti i piani.",
-    },
-    {
-      id: "come",
-      priority: 9,
-      any: ["workflow", "flusso", "routine", "passi", "come leggere"],
-      all: [
-        ["come", "funziona"],
-        ["come", "si", "usa"],
-        ["come", "uso"],
-      ],
-      // se chiede un modulo specifico, vince l'intent del modulo
-      exclude: [
-        "cot",
-        "valuation",
-        "valutazione",
-        "stagion",
-        "timing",
-        "macro",
-        "news",
-        "breaking",
-        "segnale",
-        "segnali",
-        "prezz",
-        "cost",
-      ],
-      answer:
-        "Flusso tipico in 3 passi:\n\n1) Scegli mercato e timeframe\n2) Leggi il contesto (prezzo, COT, valuation, stagionalità + timing giorno)\n3) Conferma la direzione nel Signal Center\n\nPoi decidi tu. Non sostituisce la tua analisi.",
-    },
-    {
-      id: "iniziare",
-      priority: 16,
-      any: [
-        "iniziare",
-        "inizio",
-        "iscrivermi",
-        "iscrizione",
-        "registrarmi",
-        "registrazione",
-        "provare",
-        "prova",
-        "entrare",
-        "attivare",
-        "comprare",
-        "acquistare",
-      ],
-      all: [
-        ["come", "inizio"],
-        ["come", "iniziare"],
-        ["come", "mi", "registro"],
-        ["come", "accedo"],
-        ["dove", "pago"],
-      ],
-      answer:
-        "Per iniziare:\n\n1) Vai su /prezzi e scegli un piano\n2) Completa il pagamento (Stripe)\n3) Registrati con la stessa email del checkout\n4) Accedi da /login e apri il desk (/app)\n\nHai già un account? → /login",
-    },
-    {
-      id: "login",
-      priority: 19,
-      any: [
-        "login",
-        "accedi",
-        "accesso",
-        "password",
-        "non entro",
-        "non riesco ad accedere",
-        "credenziali",
-        "problema di login",
-        "problemi di login",
-      ],
-      all: [
-        ["non", "riesco", "entrare"],
-        ["non", "riesco", "acced"],
-        ["problema", "login"],
-        ["problemi", "login"],
-        ["ho", "dimenticato"],
-        ["problemi", "accesso"],
-      ],
-      answer:
-        "Login: /login\n\nSe hai pagato ma non hai ancora l’account, registrati da /registrati con l’email del checkout.\n\nSe non entri comunque, scrivi a " +
-        SUPPORT_EMAIL +
-        " indicando email e piano.",
     },
     {
       id: "disdici",
-      priority: 19,
-      any: [
-        "disdici",
-        "disdire",
+      q: [
+        "come disdire",
+        "posso disdire",
+        "cancellare abbonamento",
         "disdetta",
-        "cancellare",
-        "cancello",
-        "annullare",
-        "rimborso",
-        "rimbors",
-        "smettere",
-        "chiudere abbonamento",
-        "gestisci abbonamento",
       ],
-      answer:
-        "Puoi gestire o disdire l’abbonamento dal desk → «Gestisci abbonamento», oppure scrivendo a " +
-        SUPPORT_EMAIL +
-        ".\n\nIndica: email account + piano (mensile / annuale / lifetime).",
+      keys: ["disdic", "disdetta", "cancellare abbonamento", "annullare abbonamento"],
+      answers: [
+        "Sì: dal desk → Gestisci abbonamento (portale Stripe), oppure scrivi a " +
+          SUPPORT_EMAIL +
+          " con email e piano.\n\nIl Lifetime non ha rinnovo ricorrente da disdire.",
+      ],
+    },
+
+    // ——— COS’È / GENERALE ———
+    {
+      id: "cosa_e",
+      q: [
+        "cos e leona lab",
+        "cos'e leona",
+        "cosa e leona lab",
+        "a cosa serve leona",
+        "che cos e questo sito",
+      ],
+      keys: ["cos'e leona", "cosa e leona", "a cosa serve", "che prodotto"],
+      answers: [
+        "Leona.Lab è un desk multi-asset: COT, stagionalità, valuation, macro, news e segnali in un flusso unico per costruire un bias LONG/SHORT/WAIT.\n\nInformazione operativa, non consulenza. /prezzi",
+        "È lo strumento che unisce positioning, timing e contesto macro nello stesso posto — pensato da trader per la routine quotidiana.\n\nPiani: /prezzi",
+      ],
     },
     {
-      id: "asset",
-      priority: 12,
-      any: [
-        "forex",
-        "metalli",
-        "metallo",
-        "oro",
-        "gold",
-        "xau",
-        "xauusd",
-        "indici",
-        "agricoli",
-        "mercati",
-        "quali asset",
-        "quali mercati",
+      id: "login",
+      q: [
+        "come faccio login",
+        "dove accedo",
+        "non riesco ad accedere",
+        "problemi di login",
       ],
-      answer:
-        "Il desk copre Forex, Metalli, Indici e Materie agricole.\n\nDai filtri in alto scegli Tipologia + Asset, poi leggi COT, stagionalità, valuation e segnali sullo stesso mercato.",
-    },
-    {
-      id: "disclaimer",
-      priority: 11,
-      any: [
-        "consulenza",
-        "garanzia",
-        "garantite",
-        "guadagno",
-        "guadagni",
-        "rischio",
-        "perdita",
-        "legale",
-        "disclaimer",
-        "responsabilita",
-        "responsabilità",
+      keys: ["login", "acced", "password", "non entro"],
+      answers: [
+        "Login: /login\n\nSe hai pagato ma non hai account: /registrati con l’email del checkout.\n\nBlocco persistente → " + SUPPORT_EMAIL,
       ],
-      answer:
-        "Leona.Lab fornisce strumenti informativi di analisi.\n\nNon è consulenza finanziaria personalizzata, non garantisce risultati di trading e non sostituisce il tuo giudizio. I mercati comportano rischio di perdita.\n\nVedi /termini e /privacy.",
     },
     {
       id: "assistenza",
-      priority: 10,
-      any: [
-        "assistenza",
-        "supporto",
-        "contatto",
-        "contattare",
+      q: [
+        "contatto assistenza",
         "email supporto",
-        "scrivere a",
-        "problema tecnico",
-        "bug",
-        "errore",
-        "non funziona",
-        "help desk",
+        "dove vi scrivo",
+        "ho un problema tecnico",
       ],
-      all: [
-        ["mi", "aiuti"],
-        ["ho", "un", "problema"],
-        ["serve", "aiuto"],
+      keys: ["assistenza", "supporto", "contatto", "supportleonalab"],
+      answers: [
+        "Assistenza: " +
+          SUPPORT_EMAIL +
+          "\n\nIndica email account, piano e problema. Pagina: /assistenza",
+        "Scrivici a " +
+          SUPPORT_EMAIL +
+          " (account, pagamento, accesso, privacy). /assistenza",
       ],
-      exclude: ["login", "password", "acced"],
-      answer:
-        "Assistenza umana: " +
-        SUPPORT_EMAIL +
-        "\n\nPer una risposta veloce indica:\n• email account\n• piano\n• breve descrizione del problema\n\nPagina: /assistenza\nAiutiamo su: accesso, registrazione post-pagamento, abbonamento, problemi tecnici, privacy.",
     },
     {
-      id: "cosa",
-      priority: 8,
-      any: [
-        "cos'e",
-        "cos'è",
-        "cose leona",
-        "che cos'e",
-        "che cos'è",
-        "a cosa serve",
-        "che prodotto",
-        "che piattaforma",
-        "spiegami leona",
-        "cos e leona",
+      id: "disclaimer",
+      q: [
+        "e consulenza finanziaria",
+        "garantite i guadagni",
+        "e un segnale automatico",
       ],
-      all: [
-        ["cos", "e"],
-        ["cosa", "e"],
-        ["che", "cose"],
-        ["a", "cosa", "serve"],
+      keys: ["consulenza", "garanzia", "guadagn", "segnale automatico"],
+      answers: [
+        "No: Leona.Lab fornisce strumenti informativi. Non è consulenza personalizzata e non garantisce risultati. I mercati hanno rischio di perdita. /termini",
       ],
-      answer:
-        "Leona.Lab è un desk multi-asset per trader: COT, stagionalità, valuation, macro, news e segnali in un solo flusso.\n\nTi aiuta a costruire un bias LONG / SHORT / WAIT — senza sostituire la tua analisi. Non è consulenza finanziaria.",
+    },
+    {
+      id: "saluto",
+      q: ["ciao", "salve", "buongiorno", "buonasera", "hey", "hello"],
+      keys: ["ciao", "salve", "buongiorno", "buonasera"],
+      answers: [
+        "Ciao! Chiedimi pure cose concrete, ad esempio:\n• «Si può pagare con PayPal?»\n• «Quanto dura il Lifetime?»\n• «Come si legge il COT?»\n• «Come mi iscrivo?»",
+        "Ciao — dimmi la domanda precisa (pagamenti, piani, COT, iscrizione…) e ti rispondo su quello.",
+      ],
     },
   ];
 
-  const STOP = new Set([
-    "il",
-    "lo",
-    "la",
-    "i",
-    "gli",
-    "le",
-    "un",
-    "uno",
-    "una",
-    "di",
-    "da",
-    "in",
-    "su",
-    "per",
-    "con",
-    "a",
-    "e",
-    "o",
-    "ma",
-    "mi",
-    "ti",
-    "si",
-    "ci",
-    "vi",
-    "che",
-    "dei",
-    "del",
-    "della",
-    "delle",
-    "degli",
-    "al",
-    "alla",
-    "ai",
-    "alle",
-    "nel",
-    "nella",
-    "nei",
-    "nelle",
-    "the",
-    "and",
-    "or",
-    "of",
-    "to",
-    "is",
-    "are",
-    "please",
-    "vorrei",
-    "volevo",
-    "sapere",
-    "dimmi",
-    "parlami",
-    "spiega",
-    "spiegami",
-    "info",
-    "informazioni",
-    "domanda",
-  ]);
+  const STOP = new Set(
+    "il lo la i gli le un uno una di da in su per con a e o ma mi ti si ci vi che dei del della delle degli al alla ai alle nel nella the and or of to is are vorrei volevo sapere dimmi parlami info".split(
+      " "
+    )
+  );
 
   function normalize(text) {
     return String(text || "")
@@ -446,155 +394,123 @@
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/[’`´]/g, "'")
       .replace(/€/g, " euro ")
-      .replace(/[^a-z0-9€'\s./+-]/g, " ")
+      .replace(/[^a-z0-9'\s.+-]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
   }
 
-  function tokenize(q) {
-    return normalize(q)
+  function tokens(text) {
+    return normalize(text)
       .split(" ")
       .map((w) => w.replace(/^'+|'+$/g, ""))
       .filter((w) => w && w.length > 1 && !STOP.has(w));
   }
 
-  function hasPhrase(q, phrase) {
-    const p = normalize(phrase);
-    if (!p) return false;
-    if (q.includes(p)) return true;
-    // token subsequence for multi-word
-    const pt = p.split(" ").filter(Boolean);
-    if (pt.length < 2) {
-      const tokens = new Set(tokenize(q));
-      return tokens.has(p);
-    }
-    const qt = normalize(q).split(" ").filter(Boolean);
-    for (let i = 0; i <= qt.length - pt.length; i++) {
-      let ok = true;
-      for (let j = 0; j < pt.length; j++) {
-        if (qt[i + j] !== pt[j]) {
-          ok = false;
-          break;
-        }
-      }
-      if (ok) return true;
-    }
-    return false;
+  function jaccard(a, b) {
+    const A = new Set(a);
+    const B = new Set(b);
+    let inter = 0;
+    A.forEach((x) => {
+      if (B.has(x)) inter++;
+    });
+    const uni = A.size + B.size - inter;
+    return uni ? inter / uni : 0;
   }
 
-  function scoreIntent(query, intent) {
+  function scoreEntry(query, entry) {
     const q = normalize(query);
+    const qt = tokens(query);
     if (!q) return 0;
-    const tokens = tokenize(query);
     let score = 0;
 
-    for (const phrase of intent.any || []) {
-      const p = normalize(phrase);
-      if (!p) continue;
-      if (q === p) score += 24;
-      else if (p.includes(" ") && q.includes(p)) score += 16;
-      else if (!p.includes(" ") && tokens.includes(p)) score += 12;
-      else if (p.length >= 5 && q.includes(p)) score += 8;
-      else if (p.length >= 6) {
-        // soft stem: token starts with key or key starts with token
-        for (const t of tokens) {
-          if (t.length < 4) continue;
-          if (t.startsWith(p.slice(0, Math.min(5, p.length))) || p.startsWith(t.slice(0, Math.min(5, t.length)))) {
-            score += 5;
-            break;
-          }
-        }
+    // 1) match vs domande tipiche (priorità alta)
+    for (const sample of entry.q || []) {
+      const s = normalize(sample);
+      const st = tokens(sample);
+      if (!s) continue;
+      if (q === s) score += 100;
+      else if (q.includes(s) || s.includes(q)) score += 48;
+      else {
+        const jac = jaccard(qt, st);
+        if (jac >= 0.5) score += 28 + jac * 40;
+        else if (jac >= 0.35) score += 14 + jac * 20;
+        // overlap conteggio
+        let hit = 0;
+        for (const t of st) if (qt.includes(t) || q.includes(t)) hit++;
+        if (st.length) score += (hit / st.length) * 18;
       }
     }
 
-    for (const group of intent.all || []) {
-      const parts = group.map(normalize).filter(Boolean);
-      if (parts.length && parts.every((p) => hasPhrase(q, p) || tokens.includes(p) || q.includes(p))) {
-        score += 18 + parts.length * 2;
-      }
+    // 2) keywords forti della voce
+    for (const key of entry.keys || []) {
+      const k = normalize(key);
+      if (!k) continue;
+      if (k.includes(" ")) {
+        if (q.includes(k)) score += 36;
+      } else if (qt.includes(k)) score += 26;
+      else if (k.length >= 4 && q.includes(k)) score += 14;
     }
 
-    for (const ex of intent.exclude || []) {
-      if (hasPhrase(q, ex) || q.includes(normalize(ex))) score -= 14;
-    }
-
-    // generic "aiuto" alone shouldn't win assistenza over a clear topic
-    if (intent.id === "assistenza" && /\b(aiuto|aiutami)\b/.test(q) && score < 20) {
-      score += 4;
-    }
-
-    // "leona" alone → product overview, but don't steal specific intents
-    if (intent.id === "cosa" && /\bleona\b/.test(q) && score > 0) {
-      score += 3;
-    }
-
-    if (score > 0) score += (intent.priority || 0) * 0.01;
     return score;
   }
 
-  function rankIntents(query) {
-    return INTENTS.map((intent) => ({ intent, score: scoreIntent(query, intent) }))
-      .filter((x) => x.score >= 8)
-      .sort((a, b) => b.score - a.score || (b.intent.priority || 0) - (a.intent.priority || 0));
+  function pickAnswer(entry, query) {
+    const list = entry.answers || [];
+    if (!list.length) return "";
+    // varianti stabili per domanda (non sempre la prima)
+    let h = 0;
+    const s = normalize(query);
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    // piccola rotazione anche nel tempo (resta sempre indice >= 0)
+    h = (h + ((Date.now() / 60000) | 0)) >>> 0;
+    return list[h % list.length];
   }
 
   function answerFor(query) {
     const raw = String(query || "").trim();
-    const q = normalize(raw);
-    if (!q) {
-      return "Scrivi una domanda su Leona.Lab, oppure usa i pulsanti sotto.";
+    if (!raw) {
+      return "Scrivi una domanda (es. «Si può pagare con PayPal?», «Come si legge il COT?»).";
     }
 
-    // short greeting-only
-    if (/^(ciao|salve|buongiorno|buonasera|hey|hola|hello|hi)[!?. ]*$/i.test(raw.trim())) {
-      return INTENTS.find((i) => i.id === "saluto").answer;
+    let best = null;
+    let bestScore = 0;
+    let second = null;
+    let secondScore = 0;
+
+    for (const entry of QA) {
+      const sc = scoreEntry(raw, entry);
+      if (sc > bestScore) {
+        second = best;
+        secondScore = bestScore;
+        best = entry;
+        bestScore = sc;
+      } else if (sc > secondScore) {
+        second = entry;
+        secondScore = sc;
+      }
     }
 
-    const ranked = rankIntents(raw);
-    if (!ranked.length) {
+    // soglia: evita risposte a caso
+    if (!best || bestScore < 16) {
       return (
-        "Non ho capito bene la domanda.\n\nProva a essere più specifico, ad esempio:\n• «Quanto costa il piano annuale?»\n• «Cosa include il desk?»\n• «Come funziona la Valuation?»\n• «Come inizio?»\n\nOppure scrivi a " +
-        SUPPORT_EMAIL +
-        " · /assistenza"
+        "Non ho collegato bene la domanda a una risposta precisa.\n\nProva così:\n• «Si può pagare con PayPal?»\n• «Quanto dura il Lifetime?»\n• «Perché dovrei abbonarmi?»\n• «Come si legge il COT?»\n• «Come mi iscrivo?»\n\nOppure " +
+        SUPPORT_EMAIL
       );
     }
 
-    const top = ranked[0];
-    const second = ranked[1];
-
-    // multi-intent: es. "prezzi e cosa include"
-    const multiIds = new Set([
-      "prezzi",
-      "include",
-      "come",
-      "iniziare",
-      "cot",
-      "stagionalita",
-      "valuation",
-      "segnali",
-      "macro",
-      "news",
-    ]);
-    const joined = [];
-    const seen = new Set();
-    for (const row of ranked.slice(0, 3)) {
-      if (row.score < 10) break;
-      if (!multiIds.has(row.intent.id)) continue;
-      if (seen.has(row.intent.id)) continue;
-      // primo sempre; successivi solo se competitivi o domanda composta
-      if (
-        joined.length === 0 ||
-        (/\b(e|anche|piu|più|,|\/)\b/.test(normalize(raw)) && row.score >= 10) ||
-        top.score - row.score < 8
-      ) {
-        joined.push(row.intent.answer);
-        seen.add(row.intent.id);
-      }
-      if (joined.length >= 2) break;
+    // se due voci vicine e la domanda le menziona entrambe, unisci
+    let text = pickAnswer(best, raw);
+    if (
+      second &&
+      secondScore >= 22 &&
+      bestScore - secondScore < 12 &&
+      best.id !== second.id &&
+      /\b(e|anche|,|\/)\b/.test(normalize(raw))
+    ) {
+      text += "\n\n—\n\n" + pickAnswer(second, raw + "|b");
     }
-    if (joined.length >= 2) return joined.join("\n\n—\n\n");
 
-    return top.intent.answer;
+    return text;
   }
 
   function el(tag, className, attrs) {
@@ -611,11 +527,10 @@
   }
 
   function linkify(text) {
-    const escaped = text
+    return String(text)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    return escaped
+      .replace(/>/g, "&gt;")
       .replace(
         /(\/prezzi|\/login|\/assistenza|\/termini|\/privacy|\/app|\/registrati)/g,
         '<a href="$1">$1</a>'
@@ -628,7 +543,6 @@
     if (document.getElementById("llAssistRoot")) return;
 
     const root = el("div", "ll-assist", { id: "llAssistRoot" });
-
     const panel = el("section", "ll-assist-panel", {
       id: "llAssistPanel",
       role: "dialog",
@@ -639,14 +553,8 @@
     const head = el("header", "ll-assist-head");
     const headText = el("div", "ll-assist-head-text");
     headText.appendChild(el("strong", "", { text: "Assistente Leona.Lab" }));
-    headText.appendChild(
-      el("span", "ll-assist-status", { text: "Risposte su prodotto e piani" })
-    );
-    const closeBtn = el("button", "ll-assist-close", {
-      type: "button",
-      "aria-label": "Chiudi chat",
-      text: "×",
-    });
+    headText.appendChild(el("span", "ll-assist-status", { text: "Domande su piani, pagamenti e desk" }));
+    const closeBtn = el("button", "ll-assist-close", { type: "button", "aria-label": "Chiudi chat", text: "×" });
     head.appendChild(headText);
     head.appendChild(closeBtn);
 
@@ -656,33 +564,28 @@
       "aria-live": "polite",
     });
 
-    const chips = el("div", "ll-assist-chips", { id: "llAssistChips" });
+    const chips = el("div", "ll-assist-chips");
     QUICK.forEach((item) => {
       const chip = el("button", "ll-assist-chip", { type: "button", text: item.label });
       chip.addEventListener("click", () => ask(item.q, item.label));
       chips.appendChild(chip);
     });
 
-    const form = el("form", "ll-assist-form", { id: "llAssistForm" });
+    const form = el("form", "ll-assist-form");
     const input = el("input", "ll-assist-input", {
       id: "llAssistInput",
       type: "text",
-      placeholder: "Es. quanto costa? come funziona COT?",
+      placeholder: "Es. si può pagare con PayPal?",
       autocomplete: "off",
       maxlength: "280",
       "aria-label": "Domanda",
     });
-    const send = el("button", "ll-assist-send", {
-      type: "submit",
-      "aria-label": "Invia",
-      text: "Invia",
-    });
+    const send = el("button", "ll-assist-send", { type: "submit", text: "Invia" });
     form.appendChild(input);
     form.appendChild(send);
 
     const foot = el("p", "ll-assist-foot", {
-      html:
-        'Bot informativo · non è consulenza · <a href="/assistenza">Assistenza umana</a>',
+      html: 'Bot informativo · non è consulenza · <a href="/assistenza">Assistenza umana</a>',
     });
 
     panel.appendChild(head);
@@ -717,16 +620,15 @@
       root.classList.toggle("is-open", open);
       panel.setAttribute("aria-hidden", open ? "false" : "true");
       fab.setAttribute("aria-expanded", open ? "true" : "false");
-      fab.setAttribute("aria-label", open ? "Chiudi assistente" : "Apri assistente");
       if (open) {
         if (!messages.childElementCount) {
           addMessage(
             "bot",
-            "Ciao — sono l’assistente Leona.Lab.\nChiedimi pure prezzi, moduli (COT, Valuation, Timing…), come iniziare o assistenza.\n\nEmail umana: " +
+            "Ciao — chiedimi cose precise: PayPal, Lifetime, perché abbonarsi, come leggere COT / Valuation, come iscriversi.\n\nEmail: " +
               SUPPORT_EMAIL
           );
         }
-        setTimeout(() => input.focus(), 180);
+        setTimeout(() => input.focus(), 160);
       }
     }
 
@@ -735,40 +637,31 @@
       if (!text) return;
       setOpen(true);
       addMessage("user", displayLabel || text);
-      const typing = el("div", "ll-assist-msg ll-assist-msg-bot ll-assist-typing", {
-        text: "…",
-      });
+      const typing = el("div", "ll-assist-msg ll-assist-msg-bot ll-assist-typing", { text: "…" });
       messages.appendChild(typing);
       messages.scrollTop = messages.scrollHeight;
       window.setTimeout(() => {
         typing.remove();
         addMessage("bot", answerFor(text));
-      }, 220 + Math.min(380, text.length * 6));
+      }, 200 + Math.min(360, text.length * 5));
     }
 
     fab.addEventListener("click", () => setOpen(!root.classList.contains("is-open")));
     closeBtn.addEventListener("click", () => setOpen(false));
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const value = input.value.trim();
-      if (!value) return;
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const v = input.value.trim();
+      if (!v) return;
       input.value = "";
-      ask(value);
+      ask(v);
+    });
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && root.classList.contains("is-open")) setOpen(false);
     });
 
-    window.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && root.classList.contains("is-open")) {
-        setOpen(false);
-      }
-    });
-
-    // expose for quick manual tests in console
     window.__llAssistAnswer = answerFor;
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", mount);
-  } else {
-    mount();
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
+  else mount();
 })();
