@@ -2564,6 +2564,7 @@ function isAllowedPublicStatic(relativePath) {
     "app.js",
     "login.js",
     "landing.js",
+    "assist-chat.js",
     "registrati.js",
     "prezzi.js",
     "styles.css",
