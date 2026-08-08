@@ -2365,3 +2365,244 @@ body.layout-focus .main-grid {
 body.layout-focus .metric {
   font-size: 1.4rem;
 }
+
+/* —— Landing assist chat widget —— */
+.ll-assist {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1200;
+  font-family: "DM Sans", Segoe UI, sans-serif;
+}
+
+.ll-assist-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid rgba(224, 192, 74, 0.55);
+  background: #0a0a0a;
+  color: var(--accent-gold);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.ll-assist-fab:hover {
+  transform: translateY(-2px);
+  background: #111;
+  border-color: var(--accent-gold);
+}
+
+.ll-assist.is-open .ll-assist-fab {
+  background: var(--accent-gold);
+  color: #000;
+  border-color: var(--accent-gold);
+}
+
+.ll-assist-panel {
+  position: absolute;
+  right: 0;
+  bottom: 70px;
+  width: min(380px, calc(100vw - 28px));
+  height: min(520px, calc(100vh - 110px));
+  display: none;
+  flex-direction: column;
+  background: #050505;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  transform-origin: bottom right;
+  animation: ll-assist-in 200ms ease;
+}
+
+.ll-assist.is-open .ll-assist-panel {
+  display: flex;
+}
+
+@keyframes ll-assist-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ll-assist-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid #222;
+  background: linear-gradient(180deg, #12100a 0%, #050505 100%);
+}
+
+.ll-assist-head-text {
+  display: grid;
+  gap: 2px;
+}
+
+.ll-assist-head-text strong {
+  color: var(--accent-gold);
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 400;
+}
+
+.ll-assist-status {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.ll-assist-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.ll-assist-close:hover {
+  color: #fff;
+}
+
+.ll-assist-messages {
+  flex: 1;
+  overflow: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(224, 192, 74, 0.06), transparent 55%),
+    #050505;
+}
+
+.ll-assist-msg {
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.ll-assist-msg a {
+  color: var(--accent-gold);
+  text-decoration: underline;
+}
+
+.ll-assist-msg-bot {
+  align-self: flex-start;
+  background: #111;
+  border: 1px solid #2a2a2a;
+  color: #f2f2f2;
+}
+
+.ll-assist-msg-user {
+  align-self: flex-end;
+  background: rgba(224, 192, 74, 0.14);
+  border: 1px solid rgba(224, 192, 74, 0.35);
+  color: #fff;
+}
+
+.ll-assist-typing {
+  opacity: 0.7;
+  letter-spacing: 0.15em;
+}
+
+.ll-assist-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.ll-assist-chip {
+  border: 1px solid #333;
+  background: #0a0a0a;
+  color: #ddd;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+
+.ll-assist-chip:hover {
+  border-color: rgba(224, 192, 74, 0.55);
+  color: var(--accent-gold);
+}
+
+.ll-assist-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 0 12px 10px;
+}
+
+.ll-assist-input {
+  width: 100%;
+  border: 1px solid #333;
+  background: #0a0a0a;
+  color: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.ll-assist-input:focus {
+  outline: none;
+  border-color: rgba(224, 192, 74, 0.65);
+}
+
+.ll-assist-send {
+  border: 1px solid var(--accent-gold);
+  background: var(--accent-gold);
+  color: #000;
+  border-radius: 10px;
+  padding: 0 14px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.ll-assist-send:hover {
+  background: var(--accent-gold-dark);
+  border-color: var(--accent-gold-dark);
+}
+
+.ll-assist-foot {
+  margin: 0;
+  padding: 0 14px 12px;
+  color: #7d8694;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.ll-assist-foot a {
+  color: var(--accent-gold);
+}
+
+@media (max-width: 520px) {
+  .ll-assist {
+    right: 12px;
+    bottom: 12px;
+  }
+
+  .ll-assist-panel {
+    width: calc(100vw - 24px);
+    height: min(70vh, 560px);
+    bottom: 66px;
+  }
+}
